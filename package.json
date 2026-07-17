@@ -1,0 +1,14 @@
+{
+  "name": "juiceengine",
+  "version": "0.1.0",
+  "description": "A small p5.js game-feel engine: pluggable update/render systems plus a data-driven, live-editable juice (effects) toolkit. Extracted from the primitives project as a starter shell.",
+  "main": "webserver.js",
+  "scripts": {
+    "start": "node webserver.js",
+    "dev": "node webserver.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}
