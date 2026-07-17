@@ -12,8 +12,32 @@ html, body {
   inset: 0;
 }
 
-/* Right-side juice editor panel. */
-#juice-panel {
+/* Mode tab bar. */
+#mode-tabs {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+}
+#mode-tabs .tab {
+  background: rgba(20, 20, 24, 0.85);
+  color: #cbb68c;
+  border: 1px solid rgba(201, 162, 39, 0.3);
+  border-radius: 7px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+#mode-tabs .tab:hover { color: #f0e2c4; }
+#mode-tabs .tab.active { background: rgba(201, 162, 39, 0.22); color: #f4e4bc; }
+
+/* Right-side panel — holds the settings + juice editors; only shown in tune. */
+#right-panel {
   position: fixed;
   top: 0;
   right: 0;
@@ -27,16 +51,21 @@ html, body {
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.5;
+  display: none;
 }
+body.mode-tune #right-panel { display: block; }
+#settings-panel { margin-bottom: 8px; }
+#settings-panel .section { margin-bottom: 10px; }
+#right-panel > div + div { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; }
 
-#juice-panel h2 { font-size: 15px; margin-bottom: 12px; letter-spacing: .04em; }
-#juice-panel h3 { font-size: 13px; margin: 14px 0 6px; color: #cbb68c; }
-#juice-panel label { display: block; margin: 10px 0; }
-#juice-panel label.slider .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-#juice-panel label.slider .val { color: #cbb68c; }
-#juice-panel label.checkbox { display: flex; align-items: center; gap: 8px; }
-#juice-panel input[type="range"] { width: 100%; }
-#juice-panel select, #juice-panel input[type="text"], #juice-panel input[type="color"] {
+#right-panel h2 { font-size: 15px; margin-bottom: 12px; letter-spacing: .04em; }
+#right-panel h3 { font-size: 13px; margin: 14px 0 6px; color: #cbb68c; }
+#right-panel label { display: block; margin: 10px 0; }
+#right-panel label.slider .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+#right-panel label.slider .val { color: #cbb68c; }
+#right-panel label.checkbox { display: flex; align-items: center; gap: 8px; }
+#right-panel input[type="range"] { width: 100%; }
+#right-panel select, #right-panel input[type="text"], #right-panel input[type="color"] {
   width: 100%;
   background: #171310;
   color: #e8e6e0;
@@ -44,16 +73,16 @@ html, body {
   border-radius: 5px;
   padding: 5px 7px;
 }
-#juice-panel .effect {
+#right-panel .effect {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   padding: 10px 12px;
   margin: 10px 0;
 }
-#juice-panel .effect-head { display: flex; justify-content: space-between; align-items: center; }
-#juice-panel .effect-head .name { font-weight: 600; color: #f0e2c4; }
-#juice-panel .hint { color: #8a867a; font-size: 12px; }
-#juice-panel button {
+#right-panel .effect-head { display: flex; justify-content: space-between; align-items: center; }
+#right-panel .effect-head .name { font-weight: 600; color: #f0e2c4; }
+#right-panel .hint { color: #8a867a; font-size: 12px; }
+#right-panel button {
   background: rgba(201, 162, 39, .16);
   color: #f0e2c4;
   border: 1px solid rgba(201, 162, 39, .35);
@@ -62,4 +91,4 @@ html, body {
   cursor: pointer;
   font: inherit;
 }
-#juice-panel button:hover { background: rgba(201, 162, 39, .28); }
+#right-panel button:hover { background: rgba(201, 162, 39, .28); }

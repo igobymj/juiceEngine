@@ -1,53 +1,75 @@
 /*
  * juiceEngine — demo project.
  *
- * With createGame() absorbing the boot boilerplate, a project is: define some
- * systems, wire them in build(), and mount whatever UI you want. Everything
- * under public/scripts/engine is app-agnostic.
+ * Shows the whole shell: createGame() boots; a DemoTarget system draws a shape
+ * from live-editable params; a ModeManager gates per-mode HUD systems and shows
+ * the editor panel only in 'tune'; a SettingsEditor tunes the target (and saves
+ * to /api/config/demo); the JuiceEditor tunes the click burst.
  *
- * Demo: click anywhere to fire the 'click' juice event (screen shake + particle
- * burst). Tune it live in the panel on the right and save.
+ * Everything under public/scripts/engine is app-agnostic — this file is the
+ * whole project.
  */
 
 import createGame from "./engine/createGame.js";
 import System from "./engine/System.js";
+import ModeManager from "./engine/ModeManager.js";
 import JuiceEditor from "./editor/JuiceEditor.js";
+import SettingsEditor from "./editor/SettingsEditor.js";
 
 const PANEL_WIDTH = 300;
+const TAB_H = 44;
 
-// Resume audio on first interaction (browser autoplay policy).
 function resumeAudio() {
   if (window.Tone) Tone.start();
   document.removeEventListener('click', resumeAudio);
 }
 document.addEventListener('click', resumeAudio);
 
-// A trivial system, written against the System base to show the pattern:
-// a target dot + prompt in the centre of the canvas area.
+// Live-editable target params (edited by the SettingsEditor below).
+const demoParams = { radius: 40, hue: 40, filled: true };
+
+// Content system: a shape drawn from demoParams + a prompt. Always on.
 class DemoTarget extends System {
   render() {
     const p = this.gameSession.p5;
-    const cx = (this.gameSession.canvasWidth - PANEL_WIDTH) / 2;
+    const cx = (this.gameSession.canvasWidth) / 2;
     const cy = this.gameSession.canvasHeight / 2;
     p.push();
-    p.noStroke();
-    p.fill(230, 226, 216);
-    p.circle(cx, cy, 76);
-    p.fill(150, 148, 140);
-    p.textAlign(p.CENTER, p.CENTER);
-    p.textSize(14);
-    p.text('click anywhere — tune the burst in the juice panel', cx, cy + 70);
+    p.colorMode(p.HSB, 360, 100, 100);
+    if (demoParams.filled) { p.noStroke(); p.fill(demoParams.hue, 55, 92); }
+    else { p.noFill(); p.stroke(demoParams.hue, 55, 92); p.strokeWeight(3); }
+    p.circle(cx, cy, demoParams.radius * 2);
+    p.pop();
+    p.push();
+    p.noStroke(); p.fill(150, 148, 140);
+    p.textAlign(p.CENTER, p.CENTER); p.textSize(14);
+    p.text('click anywhere to burst · tune tab to edit', cx, cy + demoParams.radius + 26);
     p.pop();
   }
 }
 
+// Per-mode HUD text — demonstrates ModeManager gating (only one runs at a time).
+class HudText extends System {
+  constructor(gs, text) { super(gs); this.text = text; }
+  render() {
+    const p = this.gameSession.p5;
+    p.push();
+    p.noStroke(); p.fill(120, 118, 112);
+    p.textAlign(p.LEFT, p.TOP); p.textSize(13);
+    p.text(this.text, 14, TAB_H + 6);
+    p.pop();
+  }
+}
+
+let modes;   // assigned in build(); referenced by pointerGuard
+
 const gameSession = createGame({
   parent: 'canvas',
   background: '#14131a',
-  // Ignore clicks that land on the juice panel.
-  pointerGuard: (x) => x > window.innerWidth - PANEL_WIDTH,
+  pointerGuard: (x, y) =>
+    y < TAB_H || (modes && modes.current === 'tune' && x > window.innerWidth - PANEL_WIDTH),
   build(gs) {
-    // Seed juice defaults (juice.json overlays these after boot).
+    // Juice defaults (juice.json overlays these after boot).
     gs.juiceSettings.extend({
       cheats: { juiceFx: true },
       sillyColors: { active: false, particleHue: 0 },
@@ -73,12 +95,23 @@ const gameSession = createGame({
       },
     });
 
-    // Content system.
-    const demo = new DemoTarget(gs);
-    gs.gameLoop.addUpdateSystem('demo', demo, 50);
-    gs.gameLoop.addRenderSystem('demo', demo, 50);
+    // Systems.
+    const target = new DemoTarget(gs);
+    gs.gameLoop.addUpdateSystem('target', target, 50);
+    gs.gameLoop.addRenderSystem('target', target, 50);
 
-    // Clicking fires the 'click' juice event at the pointer.
+    const playHud = new HudText(gs, 'play');
+    const tuneHud = new HudText(gs, 'tune — editing');
+    gs.gameLoop.addRenderSystem('playHud', playHud, 250);
+    gs.gameLoop.addRenderSystem('tuneHud', tuneHud, 250);
+
+    // Modes: HUDs are gated; DemoTarget + click stay always-on (not in any mode).
+    modes = new ModeManager(gs);
+    modes.define('play', { systems: [playHud] });
+    modes.define('tune', { systems: [tuneHud] });
+    modes.bindTabs('#mode-tabs');
+    modes.set('play');
+
     gs.inputManager.addMouseHandler({
       mousePressed(x, y) {
         gs.juiceEventManager.addNew('click', { position: { x, y }, velocity: { x: 0, y: 0 } });
@@ -87,7 +120,27 @@ const gameSession = createGame({
   },
 });
 
-// Load persisted juice settings, then mount the editor so its UI reflects them.
+// Restore any saved target params, then mount the settings editor.
+try {
+  const res = await fetch('public/scripts/data/demo.json');
+  if (res.ok) Object.assign(demoParams, await res.json());
+} catch (e) { /* no saved params */ }
+
+new SettingsEditor(document.getElementById('settings-panel'), {
+  title: 'Demo',
+  sections: [{
+    title: 'Target',
+    target: demoParams,
+    params: [
+      { key: 'radius', type: 'range', min: 20, max: 140, step: 1 },
+      { key: 'hue', type: 'range', min: 0, max: 360, step: 1 },
+      { key: 'filled', type: 'bool' },
+    ],
+  }],
+  save: { name: 'demo', getState: () => demoParams },
+});
+
+// Restore saved juice, then mount the juice editor.
 try {
   const res = await fetch('public/scripts/data/juice.json');
   if (res.ok) {
@@ -95,8 +148,6 @@ try {
     if (data && data.container) gameSession.juiceSettings.extend(data.container);
     if (data && data.particleSystems) gameSession.juiceSettings.extendParticleSystems(data.particleSystems);
   }
-} catch (e) {
-  // No saved file — keep the in-code defaults from build().
-}
+} catch (e) { /* keep defaults */ }
 
 new JuiceEditor(gameSession.juiceSettings, document.getElementById('juice-panel'));
