@@ -48,6 +48,9 @@ export default class GameLoop extends Manager {
 
         if(this.delayFrames <= 0) {
             for (const entry of this.__updateSystems) {
+                // Skip parked systems. Only an explicit `enabled === false`
+                // skips, so plain objects (no `enabled` field) always run.
+                if (entry.system.enabled === false) continue;
                 entry.system.update();
             }
         }
@@ -59,6 +62,7 @@ export default class GameLoop extends Manager {
 
     render(){
         for (const entry of this.__renderSystems) {
+            if (entry.system.enabled === false) continue;
             entry.system.render();
         }
     }
