@@ -41,9 +41,7 @@ export default class JuiceEventManager extends Manager {
 	constructor(gameSession) {
 
 		// singleton constructor
-		if (JuiceEventManager.__instance) {
-			return JuiceEventManager.__instance;
-		}
+		// (singleton guard removed — multiple instances allowed)
 
 		super(gameSession);
 

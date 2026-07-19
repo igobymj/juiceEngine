@@ -7,13 +7,10 @@ html, body {
   font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-#canvas {
-  position: fixed;
-  inset: 0;
-}
+#canvas { position: fixed; inset: 0; }
 
-/* Mode tab bar. */
-#mode-tabs {
+/* App tab bar (whole-app switcher). */
+#app-tabs {
   position: fixed;
   top: 10px;
   left: 10px;
@@ -21,22 +18,23 @@ html, body {
   display: flex;
   gap: 6px;
 }
-#mode-tabs .tab {
+#app-tabs .tab {
   background: rgba(20, 20, 24, 0.85);
   color: #cbb68c;
   border: 1px solid rgba(201, 162, 39, 0.3);
   border-radius: 7px;
-  padding: 5px 12px;
+  padding: 6px 14px;
   font: inherit;
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
 }
-#mode-tabs .tab:hover { color: #f0e2c4; }
-#mode-tabs .tab.active { background: rgba(201, 162, 39, 0.22); color: #f4e4bc; }
+#app-tabs .tab:hover { color: #f0e2c4; }
+#app-tabs .tab.active { background: rgba(201, 162, 39, 0.22); color: #f4e4bc; }
 
-/* Right-side panel — holds the settings + juice editors; only shown in tune. */
+/* Right-side panel — used by the 'burst' app for its juice editor; only shown
+   while that app is active. */
 #right-panel {
   position: fixed;
   top: 0;
@@ -53,10 +51,7 @@ html, body {
   line-height: 1.5;
   display: none;
 }
-body.mode-tune #right-panel { display: block; }
-#settings-panel { margin-bottom: 8px; }
-#settings-panel .section { margin-bottom: 10px; }
-#right-panel > div + div { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; }
+body.app-burst #right-panel { display: block; }
 
 #right-panel h2 { font-size: 15px; margin-bottom: 12px; letter-spacing: .04em; }
 #right-panel h3 { font-size: 13px; margin: 14px 0 6px; color: #cbb68c; }

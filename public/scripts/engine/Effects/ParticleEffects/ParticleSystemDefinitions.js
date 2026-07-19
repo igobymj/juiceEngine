@@ -10,9 +10,7 @@ export default class ParticleSystemDefinitions {
 	constructor() {
 
 		//singleton
-		if(ParticleSystemDefinitions.__instance) {
-			return ParticleSystemDefinitions.__instance;
-		}
+		// (singleton guard removed — multiple instances allowed)
 
 		ParticleSystemDefinitions.__instance = this;
 

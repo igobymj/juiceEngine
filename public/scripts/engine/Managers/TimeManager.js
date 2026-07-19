@@ -18,9 +18,7 @@ import { DEFAULT_FRAME_RATE, DEFAULT_FIXED_RATE } from "../EngineConstants.js";
 export default class TimeManager extends Manager {
 
     constructor(gameSession) {
-        if (TimeManager.__instance) {
-            return TimeManager.__instance;
-        }
+        // (singleton guard removed — multiple instances allowed)
 
 		super(gameSession);
 		

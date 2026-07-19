@@ -10,9 +10,7 @@ export default class JuiceSettings {
 	constructor() {
 
 		//singleton
-		if (JuiceSettings.__instance) {
-			return JuiceSettings.__instance;
-		}
+		// (singleton guard removed — multiple instances allowed)
 
 		JuiceSettings.__instance = this;
 

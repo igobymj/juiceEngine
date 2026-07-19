@@ -12,9 +12,7 @@ export default class GameLoop extends Manager {
     constructor(gameSession){
 
         //singleton
-        if(GameLoop.__instance){
-            return GameLoop.__instance;
-        }
+        // (singleton guard removed — multiple instances allowed)
 
         super(gameSession);
 

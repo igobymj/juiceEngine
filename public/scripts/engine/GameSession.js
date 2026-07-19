@@ -11,9 +11,7 @@ import ParticleSystemDefinitions from "./Effects/ParticleEffects/ParticleSystemD
 export default class GameSession {
 
 	constructor() {
-		if (GameSession.__instance) {
-			return GameSession.__instance;
-		}
+		// (singleton guard removed — multiple instances allowed)
 		GameSession.__instance = this;
 		this.__instance = this;
 		//Browser Information

@@ -18,9 +18,7 @@ import Manager from "./Manager.js";
 export default class InputManager extends Manager {
 
     constructor(gameSession) {
-        if (InputManager.__instance) {
-            return InputManager.__instance;
-        }
+        // (singleton guard removed — multiple instances allowed)
 
         super(gameSession);
 

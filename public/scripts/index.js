@@ -1,23 +1,23 @@
 /*
- * juiceEngine — demo project.
+ * juiceEngine — multi-app demo.
  *
- * Shows the whole shell: createGame() boots; a DemoTarget system draws a shape
- * from live-editable params; a ModeManager gates per-mode HUD systems and shows
- * the editor panel only in 'tune'; a SettingsEditor tunes the target (and saves
- * to /api/config/demo); the JuiceEditor tunes the click burst.
+ * Two entirely separate games behind the tab bar, each its own GameSession
+ * (own loop, managers, juice settings, systems), sharing only the canvas:
  *
- * Everything under public/scripts/engine is app-agnostic — this file is the
- * whole project.
+ *   burst — click to fire a juice burst; tune it live in the panel (its juice
+ *           settings persist across tab switches because the session is kept).
+ *   orbit — a shape orbiting the centre; click reverses its direction.
+ *
+ * AppShell owns the canvas and ticks only the active app. This is the layer
+ * above ModeManager: different applications, not different modes of one app.
  */
 
-import createGame from "./engine/createGame.js";
+import AppShell from "./engine/AppShell.js";
 import System from "./engine/System.js";
-import ModeManager from "./engine/ModeManager.js";
 import JuiceEditor from "./editor/JuiceEditor.js";
-import SettingsEditor from "./editor/SettingsEditor.js";
 
 const PANEL_WIDTH = 300;
-const TAB_H = 44;
+const TAB_H = 46;
 
 function resumeAudio() {
   if (window.Tone) Tone.start();
@@ -25,51 +25,33 @@ function resumeAudio() {
 }
 document.addEventListener('click', resumeAudio);
 
-// Live-editable target params (edited by the SettingsEditor below).
-const demoParams = { radius: 40, hue: 40, filled: true };
+/* ---------- app: burst ---------- */
 
-// Content system: a shape drawn from demoParams + a prompt. Always on.
-class DemoTarget extends System {
+class BurstTarget extends System {
   render() {
     const p = this.gameSession.p5;
-    const cx = (this.gameSession.canvasWidth) / 2;
+    const cx = this.gameSession.canvasWidth / 2;
     const cy = this.gameSession.canvasHeight / 2;
     p.push();
-    p.colorMode(p.HSB, 360, 100, 100);
-    if (demoParams.filled) { p.noStroke(); p.fill(demoParams.hue, 55, 92); }
-    else { p.noFill(); p.stroke(demoParams.hue, 55, 92); p.strokeWeight(3); }
-    p.circle(cx, cy, demoParams.radius * 2);
-    p.pop();
-    p.push();
-    p.noStroke(); p.fill(150, 148, 140);
-    p.textAlign(p.CENTER, p.CENTER); p.textSize(14);
-    p.text('click anywhere to burst · tune tab to edit', cx, cy + demoParams.radius + 26);
+    p.noStroke();
+    p.fill(230, 226, 216);
+    p.circle(cx, cy, 76);
+    p.fill(150, 148, 140);
+    p.textAlign(p.CENTER, p.CENTER);
+    p.textSize(14);
+    p.text('click anywhere — tune the burst on the right', cx, cy + 66);
     p.pop();
   }
 }
 
-// Per-mode HUD text — demonstrates ModeManager gating (only one runs at a time).
-class HudText extends System {
-  constructor(gs, text) { super(gs); this.text = text; }
-  render() {
-    const p = this.gameSession.p5;
-    p.push();
-    p.noStroke(); p.fill(120, 118, 112);
-    p.textAlign(p.LEFT, p.TOP); p.textSize(13);
-    p.text(this.text, 14, TAB_H + 6);
-    p.pop();
-  }
-}
+// Optionally overlay the persisted juice settings (loaded before the shell).
+let savedJuice = null;
 
-let modes;   // assigned in build(); referenced by pointerGuard
-
-const gameSession = createGame({
-  parent: 'canvas',
+const burst = {
+  id: 'burst',
+  title: 'burst',
   background: '#14131a',
-  pointerGuard: (x, y) =>
-    y < TAB_H || (modes && modes.current === 'tune' && x > window.innerWidth - PANEL_WIDTH),
   build(gs) {
-    // Juice defaults (juice.json overlays these after boot).
     gs.juiceSettings.extend({
       cheats: { juiceFx: true },
       sillyColors: { active: false, particleHue: 0 },
@@ -94,23 +76,14 @@ const gameSession = createGame({
         },
       },
     });
+    if (savedJuice) {
+      if (savedJuice.container) gs.juiceSettings.extend(savedJuice.container);
+      if (savedJuice.particleSystems) gs.juiceSettings.extendParticleSystems(savedJuice.particleSystems);
+    }
 
-    // Systems.
-    const target = new DemoTarget(gs);
+    const target = new BurstTarget(gs);
     gs.gameLoop.addUpdateSystem('target', target, 50);
     gs.gameLoop.addRenderSystem('target', target, 50);
-
-    const playHud = new HudText(gs, 'play');
-    const tuneHud = new HudText(gs, 'tune — editing');
-    gs.gameLoop.addRenderSystem('playHud', playHud, 250);
-    gs.gameLoop.addRenderSystem('tuneHud', tuneHud, 250);
-
-    // Modes: HUDs are gated; DemoTarget + click stay always-on (not in any mode).
-    modes = new ModeManager(gs);
-    modes.define('play', { systems: [playHud] });
-    modes.define('tune', { systems: [tuneHud] });
-    modes.bindTabs('#mode-tabs');
-    modes.set('play');
 
     gs.inputManager.addMouseHandler({
       mousePressed(x, y) {
@@ -118,36 +91,67 @@ const gameSession = createGame({
       },
     });
   },
-});
+  onActivate(gs) {
+    // Mount this app's juice editor (bound to this app's own juice settings).
+    new JuiceEditor(gs.juiceSettings, document.getElementById('right-panel'));
+  },
+  onDeactivate() {
+    document.getElementById('right-panel').innerHTML = '';
+  },
+};
 
-// Restore any saved target params, then mount the settings editor.
-try {
-  const res = await fetch('public/scripts/data/demo.json');
-  if (res.ok) Object.assign(demoParams, await res.json());
-} catch (e) { /* no saved params */ }
+/* ---------- app: orbit ---------- */
 
-new SettingsEditor(document.getElementById('settings-panel'), {
-  title: 'Demo',
-  sections: [{
-    title: 'Target',
-    target: demoParams,
-    params: [
-      { key: 'radius', type: 'range', min: 20, max: 140, step: 1 },
-      { key: 'hue', type: 'range', min: 0, max: 360, step: 1 },
-      { key: 'filled', type: 'bool' },
-    ],
-  }],
-  save: { name: 'demo', getState: () => demoParams },
-});
+class Orbit extends System {
+  constructor(gs) { super(gs); this.angle = 0; this.dir = 1; }
+  update() { this.angle += 0.02 * this.dir; }
+  reverse() { this.dir *= -1; }
+  render() {
+    const p = this.gameSession.p5;
+    const cx = this.gameSession.canvasWidth / 2;
+    const cy = this.gameSession.canvasHeight / 2;
+    const r = 130;
+    const x = cx + Math.cos(this.angle) * r;
+    const y = cy + Math.sin(this.angle) * r;
+    p.push();
+    p.stroke(90, 120, 170); p.strokeWeight(1); p.noFill();
+    p.circle(cx, cy, r * 2);
+    p.noStroke();
+    p.fill(120, 150, 200); p.circle(cx, cy, 26);
+    p.fill(230, 236, 246); p.circle(x, y, 30);
+    p.fill(120, 140, 170); p.textAlign(p.CENTER, p.CENTER); p.textSize(14);
+    p.text('a different app entirely — click to reverse', cx, cy + r + 34);
+    p.pop();
+  }
+}
 
-// Restore saved juice, then mount the juice editor.
+const orbit = {
+  id: 'orbit',
+  title: 'orbit',
+  background: '#0e1726',
+  build(gs) {
+    const o = new Orbit(gs);
+    gs.gameLoop.addUpdateSystem('orbit', o, 50);
+    gs.gameLoop.addRenderSystem('orbit', o, 50);
+    gs.inputManager.addMouseHandler({ mousePressed() { o.reverse(); } });
+  },
+};
+
+/* ---------- shell ---------- */
+
+// Load burst's persisted juice before building anything.
 try {
   const res = await fetch('public/scripts/data/juice.json');
-  if (res.ok) {
-    const data = await res.json();
-    if (data && data.container) gameSession.juiceSettings.extend(data.container);
-    if (data && data.particleSystems) gameSession.juiceSettings.extendParticleSystems(data.particleSystems);
-  }
-} catch (e) { /* keep defaults */ }
+  if (res.ok) savedJuice = await res.json();
+} catch (e) { /* defaults */ }
 
-new JuiceEditor(gameSession.juiceSettings, document.getElementById('juice-panel'));
+let shell;
+shell = new AppShell({
+  parent: 'canvas',
+  apps: [burst, orbit],
+  tabs: '#app-tabs',
+  initial: 'burst',
+  // Drop clicks on the tab bar, and on the panel while burst is active.
+  pointerGuard: (x, y) =>
+    y < TAB_H || (shell && shell.activeId === 'burst' && x > window.innerWidth - PANEL_WIDTH),
+});

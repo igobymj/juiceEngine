@@ -12,9 +12,7 @@ import Manager from "./Manager.js";
 
 export default class SoundManager extends Manager {
 	constructor(gameSession) {
-		if (SoundManager.__instance) {
-			return SoundManager.__instance;
-		}
+		// (singleton guard removed — multiple instances allowed)
 
 		super(gameSession);
 

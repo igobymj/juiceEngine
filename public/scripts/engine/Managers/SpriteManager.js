@@ -6,9 +6,7 @@ import Manager from "./Manager.js";
 export default class SpriteManager extends Manager {
 
 	constructor(gameSession) {
-		if(SpriteManager.__instance) {
-			return SpriteManager.__instance;
-		}
+		// (singleton guard removed — multiple instances allowed)
 
 		super(gameSession);
 
