@@ -24,15 +24,14 @@
     <aside id="editor"></aside>
   </div>
 
-  <!-- primitives' own UI: mode tabs + panels, shown only while it's active. -->
+  <!-- primitives' own UI: mode tabs + creature editor, shown only while active.
+       Juice/sound editing uses the shared right-edge editor. -->
   <nav id="mode-tabs">
     <button class="tab" data-mode="editor">editor</button>
     <button class="tab" data-mode="play">play</button>
     <button class="tab" data-mode="garden">garden</button>
-    <button class="tab" data-mode="juice">juice editor</button>
   </nav>
   <aside id="editor-panel"></aside>
-  <aside id="juice-panel"></aside>
 
   <script src="https://cdn.jsdelivr.net/npm/tone@14/build/Tone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.min.js"></script>

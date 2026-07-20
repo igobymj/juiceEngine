@@ -202,6 +202,10 @@ try {
   if (res.ok) setPrimJuice(await res.json());
 } catch (e) { /* primitives defaults */ }
 
+// primitives uses the shared juice/sound editor too (its own juice editor was
+// deprecated; the creature editor stays in its own panel).
+primitivesApp.onActivate = (gs) => mountEditors(gs, 'primitives');
+
 let shell;
 shell = new AppShell({
   parent: 'canvas',

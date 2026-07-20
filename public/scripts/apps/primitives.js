@@ -2,12 +2,13 @@
  * primitives — the primitives game, retrofitted as a juiceEngine app.
  *
  * The whole game is wired in build(gs): its managers, systems, input handlers,
- * modes (editor/play/garden/juice), and side panels. It runs on the shared
- * canvas the AppShell owns, so it does NOT boot p5 and does NOT register the
- * input/juice systems (the shell already does). Its own mode tabs and panels
- * (#mode-tabs / #editor-panel / #juice-panel) live in the page, shown only
- * while this app is active (see primitives.css, gated to body.app-primitives).
+ * modes (editor/play/garden), and side panel. It runs on the shared canvas the
+ * AppShell owns, so it does NOT boot p5 and does NOT register the input/juice
+ * systems (the shell already does).
  *
+ * Its own UI is the mode tabs (#mode-tabs) plus the creature editor
+ * (#editor-panel), shown only while this app is active. Juice/sound editing uses
+ * the shared right-edge editor (its old #juice-panel editor was deprecated).
  * Mode + panel-region state is exposed via pointerGuard() so the shell can drop
  * clicks that land on this app's tab bar or panels.
  */
@@ -18,7 +19,6 @@ import FoodManager from "../game/FoodManager.js";
 import InkManager, { INK_TYPES } from "../game/InkManager.js";
 import GardenScatter from "../game/GardenScatter.js";
 import Editor from "../editor/Editor.js";
-import JuiceEditor from "../editor/JuiceEditor.js";
 import { renderText, measureText } from "../game/VectorText.js";
 
 const MODE_TAB_H = 40;     // primitives' mode tab bar height
@@ -29,13 +29,14 @@ export function setSavedJuice(data) { savedJuice = data; }
 
 let state = null;          // { currentMode } — for the pointer guard
 
-// Drop clicks on this app's mode-tab strip (top of canvas) or its side panels.
+// Drop clicks on this app's mode-tab strip (top of canvas) or its side panel:
+// the creature editor (260) in editor mode, else the shared juice/sound editor
+// (300) shown for the other modes.
 export function pointerGuard(x, y, gs) {
   if (!state) return false;
   if (y < MODE_TAB_H) return true;
-  const w = state.currentMode === 'editor' ? PANEL_WIDTH
-          : state.currentMode === 'juice' ? 300 : 0;
-  return w > 0 && x > gs.canvasWidth - w;
+  const w = state.currentMode === 'editor' ? PANEL_WIDTH : 300;
+  return x > gs.canvasWidth - w;
 }
 
 function lineFarEndpointWorld(creature, line) {
@@ -276,8 +277,10 @@ export default {
       return creature;
     }
 
+    // Juice/sound editing uses the shared right-edge editor (mounted by the
+    // shell in onActivate). Only the creature editor lives in primitives' own
+    // panel now.
     new Editor(creatureManager, document.getElementById('editor-panel'), createCreature);
-    new JuiceEditor(gs.juiceSettings, document.getElementById('juice-panel'), { saveName: 'primitives' });
     creatureManager.onSpawnRequest = (x, y) => createCreature(x, y);
 
     creatureManager.mode = currentMode;
@@ -289,7 +292,6 @@ export default {
       creatureManager.mode = mode;
       document.body.classList.toggle('mode-play', mode === 'play');
       document.body.classList.toggle('mode-editor', mode === 'editor');
-      document.body.classList.toggle('mode-juice', mode === 'juice');
       document.body.classList.toggle('mode-garden', mode === 'garden');
       document.querySelectorAll('#mode-tabs .tab').forEach((btn) =>
         btn.classList.toggle('active', btn.dataset.mode === mode));
@@ -298,7 +300,6 @@ export default {
       else foodManager.enable();
       inkManager.setEnabled(mode === 'garden');
       if (mode === 'garden') gardenScatter.enable(); else gardenScatter.disable();
-      gardenScatter.setPreview(mode === 'juice');
       creatureManager.clickSpawnEnabled = (mode !== 'garden');
     }
 

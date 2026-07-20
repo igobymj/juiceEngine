@@ -64,8 +64,9 @@ html, body {
   font-size: 13px;
   line-height: 1.5;
 }
-/* Shown for every app except primitives, which brings its own editor UI. */
-body.app-primitives #editor { display: none; }
+/* Shown for every app. In primitives, hide it only in editor mode, where the
+   creature editor takes the right edge instead. */
+body.app-primitives.mode-editor #editor { display: none; }
 
 /* ---------- foldable menus ---------- */
 .fold {
@@ -153,7 +154,6 @@ body.app-primitives #editor { display: none; }
 
 /* ---------- primitives app UI (offset below game tabs; gated to its app) ---- */
 #mode-tabs { top: var(--tab-h) !important; }
-#editor-panel, #juice-panel { top: calc(var(--tab-h) + 40px) !important; height: calc(100vh - var(--tab-h) - 40px) !important; }
+#editor-panel { top: calc(var(--tab-h) + 40px) !important; height: calc(100vh - var(--tab-h) - 40px) !important; }
 body:not(.app-primitives) #mode-tabs,
-body:not(.app-primitives) #editor-panel,
-body:not(.app-primitives) #juice-panel { display: none !important; }
+body:not(.app-primitives) #editor-panel { display: none !important; }
