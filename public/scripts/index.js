@@ -122,7 +122,7 @@ const burst = {
     editor.innerHTML = '';
 
     const juiceFold = new FoldMenu(editor, 'juice', { open: true, save: true });
-    const soundFold = new FoldMenu(editor, 'sound', { open: true, save: true });
+    const soundFold = new FoldMenu(editor, 'sound', { open: false, save: true });
 
     const juiceEd = new JuiceEditor(gs.juiceSettings, juiceFold.body, {
       exclude: ['sound'], heading: false, save: false,
