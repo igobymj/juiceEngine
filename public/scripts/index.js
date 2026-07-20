@@ -23,6 +23,7 @@ import DefaultBullet from "./engine/sounds/DefaultBullet.js";
 import AlternateBullet from "./engine/sounds/AlternateBullet.js";
 import DefaultExplosion from "./engine/sounds/DefaultExplosion.js";
 import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPointerGuard } from "./apps/primitives.js";
+import asteroidsApp, { setSavedJuice as setAstJuice, extraApply as astExtraApply } from "./apps/asteroids.js";
 
 const PANEL_WIDTH = 300;
 
@@ -241,15 +242,26 @@ try {
   const res = await fetch('public/scripts/data/primitives.json');
   if (res.ok) setPrimJuice(await res.json());
 } catch (e) { /* primitives defaults */ }
+try {
+  const res = await fetch('public/scripts/data/asteroids.json');
+  if (res.ok) setAstJuice(await res.json());
+} catch (e) { /* asteroids defaults */ }
 
 // primitives uses the shared juice/sound editor too (its own juice editor was
 // deprecated; the creature editor stays in its own panel).
 primitivesApp.onActivate = (gs) => mountEditors(gs, 'primitives', primitivesApp.extras);
 
+// asteroids uses the shared editors; its extras onApply is bound to the session
+// here so the session-agnostic extras editor can drive music side effects.
+asteroidsApp.onActivate = (gs) => mountEditors(gs, 'asteroids', {
+  schema: asteroidsApp.extras.schema,
+  onApply: (b, p, v) => astExtraApply(gs, b, p, v),
+});
+
 let shell;
 shell = new AppShell({
   parent: 'canvas',
-  apps: [burst, orbit, primitivesApp],
+  apps: [burst, orbit, primitivesApp, asteroidsApp],
   tabs: '#game-tabs',
   initial: 'burst',
   // Canvas coords are relative to the stage (below the tab bar), so a click on
