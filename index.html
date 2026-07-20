@@ -9,15 +9,17 @@
 </head>
 
 <body>
-  <nav id="app-tabs">
-    <button class="tab" data-app="burst">burst</button>
-    <button class="tab" data-app="orbit">orbit</button>
+  <!-- Top-level: each game is its own window tab. -->
+  <nav id="game-tabs">
+    <button class="game-tab" data-app="burst">burst</button>
+    <button class="game-tab" data-app="orbit">orbit</button>
   </nav>
-  <div id="canvas"></div>
-  <aside id="right-panel">
-    <div id="sound-editor"></div>
-    <div id="juice-editor"></div>
-  </aside>
+
+  <div id="stage">
+    <div id="canvas"></div>
+    <!-- Right-edge editor: independent foldable menus injected here. -->
+    <aside id="editor"></aside>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/tone@14/build/Tone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.min.js"></script>

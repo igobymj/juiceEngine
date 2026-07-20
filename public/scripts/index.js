@@ -15,10 +15,10 @@
 import AppShell from "./engine/AppShell.js";
 import System from "./engine/System.js";
 import JuiceEditor from "./editor/JuiceEditor.js";
+import FoldMenu from "./editor/FoldMenu.js";
 import SynthSound from "./engine/sounds/SynthSound.js";
 
 const PANEL_WIDTH = 300;
-const TAB_H = 46;
 
 function resumeAudio() {
   if (window.Tone) Tone.start();
@@ -98,23 +98,23 @@ const burst = {
     });
   },
   onActivate(gs) {
-    // Sound gets its own panel; the juice editor covers the visual effects.
-    // Both drive the same juiceSettings container — the juice panel's Save
-    // persists everything (including sound), so the sound panel omits Save.
-    new JuiceEditor(gs.juiceSettings, document.getElementById('sound-editor'), {
-      title: 'sound',
-      only: ['sound'],
-      save: false,
+    // Two independent foldable menus in the right-edge editor. Both drive the
+    // same juiceSettings container; the juice menu's Save persists everything
+    // (sound included), so the sound menu omits Save.
+    const editor = document.getElementById('editor');
+    editor.innerHTML = '';
+
+    const juiceFold = new FoldMenu(editor, 'juice', { open: true });
+    new JuiceEditor(gs.juiceSettings, juiceFold.body, { exclude: ['sound'], heading: false });
+
+    const soundFold = new FoldMenu(editor, 'sound', { open: true });
+    new JuiceEditor(gs.juiceSettings, soundFold.body, {
+      only: ['sound'], heading: false, save: false,
       optionSources: { sounds: () => gs.soundManager.names() },
-    });
-    new JuiceEditor(gs.juiceSettings, document.getElementById('juice-editor'), {
-      title: 'juice',
-      exclude: ['sound'],
     });
   },
   onDeactivate() {
-    document.getElementById('sound-editor').innerHTML = '';
-    document.getElementById('juice-editor').innerHTML = '';
+    document.getElementById('editor').innerHTML = '';
   },
 };
 
@@ -167,9 +167,10 @@ let shell;
 shell = new AppShell({
   parent: 'canvas',
   apps: [burst, orbit],
-  tabs: '#app-tabs',
+  tabs: '#game-tabs',
   initial: 'burst',
-  // Drop clicks on the tab bar, and on the panel while burst is active.
-  pointerGuard: (x, y) =>
-    y < TAB_H || (shell && shell.activeId === 'burst' && x > window.innerWidth - PANEL_WIDTH),
+  // Canvas coords are relative to the stage (below the tab bar), so a click on
+  // the tabs reads as y < 0. Also drop clicks on the editor while burst active.
+  pointerGuard: (x, y, gs) =>
+    y < 0 || (shell && shell.activeId === 'burst' && x > gs.canvasWidth - PANEL_WIDTH),
 });

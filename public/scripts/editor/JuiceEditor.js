@@ -98,6 +98,7 @@ export default class JuiceEditor {
         this.exclude = options.exclude || null;   // blacklist of effect keys
         this.title = options.title || 'juice';
         this.showSave = options.save !== false;
+        this.showHeading = options.heading !== false;   // fold headers can supply the title instead
         this.events = this._listEvents();
         this.selectedEvent = this.events[0] ?? null;
         this._render();
@@ -121,9 +122,10 @@ export default class JuiceEditor {
     }
 
     _render() {
+        const heading = this.showHeading ? `<h2>${this.title}</h2>` : '';
         const events = this.events;
         if (events.length === 0) {
-            this.panelEl.innerHTML = `<h2>${this.title}</h2><p class="hint">No events configured.</p>`;
+            this.panelEl.innerHTML = `${heading}<p class="hint">No events configured.</p>`;
             return;
         }
         const optionsHtml = events
@@ -138,7 +140,7 @@ export default class JuiceEditor {
                <div data-region="save-status" class="hint" style="min-height: 1em; margin: -8px 0 12px;"></div>`
             : '';
         this.panelEl.innerHTML = `
-            <h2>${this.title}</h2>
+            ${heading}
             ${saveHtml}
             <label>
                 <span class="row" style="display:block; margin-bottom:6px; color:#8a867a;">event</span>
