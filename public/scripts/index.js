@@ -21,6 +21,7 @@ import SampleSoundObject from "./engine/sounds/SampleSoundObject.js";
 import DefaultBullet from "./engine/sounds/DefaultBullet.js";
 import AlternateBullet from "./engine/sounds/AlternateBullet.js";
 import DefaultExplosion from "./engine/sounds/DefaultExplosion.js";
+import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPointerGuard } from "./apps/primitives.js";
 
 const PANEL_WIDTH = 300;
 
@@ -198,15 +199,24 @@ try {
   const res = await fetch('/api/sounds');
   if (res.ok) clipFiles = await res.json();
 } catch (e) { /* no clips dir / not dev server */ }
+try {
+  const res = await fetch('public/scripts/data/primitives.json');
+  if (res.ok) setPrimJuice(await res.json());
+} catch (e) { /* primitives defaults */ }
 
 let shell;
 shell = new AppShell({
   parent: 'canvas',
-  apps: [burst, orbit],
+  apps: [burst, orbit, primitivesApp],
   tabs: '#game-tabs',
   initial: 'burst',
   // Canvas coords are relative to the stage (below the tab bar), so a click on
-  // the tabs reads as y < 0. Also drop clicks on the editor while burst active.
-  pointerGuard: (x, y, gs) =>
-    y < 0 || (shell && shell.activeId === 'burst' && x > gs.canvasWidth - PANEL_WIDTH),
+  // the tabs reads as y < 0. Each app also drops clicks on its own panels.
+  pointerGuard: (x, y, gs) => {
+    if (y < 0) return true;
+    if (!shell) return false;
+    if (shell.activeId === 'burst') return x > gs.canvasWidth - PANEL_WIDTH;
+    if (shell.activeId === 'primitives') return primPointerGuard(x, y, gs);
+    return false;
+  },
 });

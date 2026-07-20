@@ -5,6 +5,8 @@
   <meta charset="utf-8">
   <meta name='viewport' content='width=device-width, initial-scale=1'>
   <title>juiceEngine</title>
+  <!-- primitives.css first so juiceEngine's base rules win where they overlap. -->
+  <link rel="stylesheet" type="text/css" href="./public/styles/primitives.css">
   <link rel="stylesheet" type="text/css" href="./public/styles/index.css">
 </head>
 
@@ -13,13 +15,24 @@
   <nav id="game-tabs">
     <button class="game-tab" data-app="burst">burst</button>
     <button class="game-tab" data-app="orbit">orbit</button>
+    <button class="game-tab" data-app="primitives">primitives</button>
   </nav>
 
   <div id="stage">
     <div id="canvas"></div>
-    <!-- Right-edge editor: independent foldable menus injected here. -->
+    <!-- Right-edge editor: independent foldable menus injected here (burst). -->
     <aside id="editor"></aside>
   </div>
+
+  <!-- primitives' own UI: mode tabs + panels, shown only while it's active. -->
+  <nav id="mode-tabs">
+    <button class="tab" data-mode="editor">editor</button>
+    <button class="tab" data-mode="play">play</button>
+    <button class="tab" data-mode="garden">garden</button>
+    <button class="tab" data-mode="juice">juice editor</button>
+  </nav>
+  <aside id="editor-panel"></aside>
+  <aside id="juice-panel"></aside>
 
   <script src="https://cdn.jsdelivr.net/npm/tone@14/build/Tone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.min.js"></script>

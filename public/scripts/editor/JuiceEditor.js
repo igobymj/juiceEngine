@@ -101,6 +101,9 @@ export default class JuiceEditor {
         this.showSave = options.save !== false;
         this.showHeading = options.heading !== false;   // fold headers can supply the title instead
         this.onChange = options.onChange || null;        // fired on any control edit (dirty tracking)
+        // Where save() posts: default the shared /api/juice, or /api/config/<name>
+        // so different apps persist to their own file.
+        this.saveUrl = options.saveName ? ('/api/config/' + options.saveName) : '/api/juice';
         this.events = this._listEvents();
         this.selectedEvent = this.events[0] ?? null;
         this._render();
@@ -163,7 +166,7 @@ export default class JuiceEditor {
     // an external control (e.g. a fold header's save button).
     async save() {
         try {
-            const res = await fetch('/api/juice', {
+            const res = await fetch(this.saveUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -182,7 +185,7 @@ export default class JuiceEditor {
         const status = this.panelEl.querySelector('[data-region="save-status"]');
         if (status) status.textContent = 'saving…';
         try {
-            const res = await fetch('/api/juice', {
+            const res = await fetch(this.saveUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -150,3 +150,10 @@ body.app-burst #editor { display: block; }
   font: inherit;
 }
 #editor button:hover { background: rgba(201, 162, 39, .28); }
+
+/* ---------- primitives app UI (offset below game tabs; gated to its app) ---- */
+#mode-tabs { top: var(--tab-h) !important; }
+#editor-panel, #juice-panel { top: calc(var(--tab-h) + 40px) !important; height: calc(100vh - var(--tab-h) - 40px) !important; }
+body:not(.app-primitives) #mode-tabs,
+body:not(.app-primitives) #editor-panel,
+body:not(.app-primitives) #juice-panel { display: none !important; }
