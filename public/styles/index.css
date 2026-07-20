@@ -101,6 +101,20 @@ body.app-burst #editor { display: block; }
 .fold-body { padding: 2px 12px 12px; }
 .fold:not(.open) .fold-body { display: none; }
 
+/* Header-integrated save — shown only when the menu is dirty. */
+.fold-save {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: #f4e4bc;
+  background: rgba(201, 162, 39, 0.22);
+  border: 1px solid rgba(201, 162, 39, 0.45);
+  border-radius: 5px;
+  padding: 2px 10px;
+}
+.fold-save:hover { background: rgba(201, 162, 39, 0.38); }
+.fold-save[hidden] { display: none; }
+
 /* ---------- editor controls ---------- */
 #editor h2 { font-size: 15px; margin-bottom: 12px; letter-spacing: .04em; }
 #editor h3 { font-size: 13px; margin: 14px 0 6px; color: #cbb68c; }

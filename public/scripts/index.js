@@ -99,19 +99,32 @@ const burst = {
   },
   onActivate(gs) {
     // Two independent foldable menus in the right-edge editor. Both drive the
-    // same juiceSettings container; the juice menu's Save persists everything
-    // (sound included), so the sound menu omits Save.
+    // same juiceSettings container, so a change in either marks both dirty, and
+    // saving from either header persists everything and clears both. The save
+    // affordance lives in each header and only appears once something changes.
     const editor = document.getElementById('editor');
     editor.innerHTML = '';
 
-    const juiceFold = new FoldMenu(editor, 'juice', { open: true });
-    new JuiceEditor(gs.juiceSettings, juiceFold.body, { exclude: ['sound'], heading: false });
+    const juiceFold = new FoldMenu(editor, 'juice', { open: true, save: true });
+    const soundFold = new FoldMenu(editor, 'sound', { open: true, save: true });
 
-    const soundFold = new FoldMenu(editor, 'sound', { open: true });
+    const markDirty = () => { juiceFold.setDirty(true); soundFold.setDirty(true); };
+
+    const juiceEd = new JuiceEditor(gs.juiceSettings, juiceFold.body, {
+      exclude: ['sound'], heading: false, save: false, onChange: markDirty,
+    });
     new JuiceEditor(gs.juiceSettings, soundFold.body, {
-      only: ['sound'], heading: false, save: false,
+      only: ['sound'], heading: false, save: false, onChange: markDirty,
       optionSources: { sounds: () => gs.soundManager.names() },
     });
+
+    const saveAll = async () => {
+      await juiceEd.save();
+      juiceFold.setDirty(false);
+      soundFold.setDirty(false);
+    };
+    juiceFold.onSave = saveAll;
+    soundFold.onSave = saveAll;
   },
   onDeactivate() {
     document.getElementById('editor').innerHTML = '';

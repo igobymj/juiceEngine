@@ -99,6 +99,7 @@ export default class JuiceEditor {
         this.title = options.title || 'juice';
         this.showSave = options.save !== false;
         this.showHeading = options.heading !== false;   // fold headers can supply the title instead
+        this.onChange = options.onChange || null;        // fired on any control edit (dirty tracking)
         this.events = this._listEvents();
         this.selectedEvent = this.events[0] ?? null;
         this._render();
@@ -155,6 +156,25 @@ export default class JuiceEditor {
         const saveBtn = this.panelEl.querySelector('[data-ctrl="save"]');
         if (saveBtn) saveBtn.addEventListener('click', () => this._save());
         this._renderEffects();
+    }
+
+    // Persist the whole juice container. Returns true on success. Callable from
+    // an external control (e.g. a fold header's save button).
+    async save() {
+        try {
+            const res = await fetch('/api/juice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    container: this.juiceSettings.container,
+                    particleSystems: this.juiceSettings.particleSystems,
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            return res.ok && data.ok !== false;
+        } catch (e) {
+            return false;
+        }
     }
 
     async _save() {
@@ -314,6 +334,7 @@ export default class JuiceEditor {
             } else {
                 this.juiceSettings.updateJuice(eventKey, effect, param, value);
             }
+            if (this.onChange) this.onChange();
         };
         if (type === 'bool') {
             node.addEventListener('change', (e) => apply(!!e.target.checked));
