@@ -268,18 +268,22 @@ export default class JuiceEditor {
                     </label>
                 `;
             case 'range': {
+                // Guard against a param the settings don't carry (undefined) or
+                // a non-numeric value: fall back to the min so the slider shows
+                // a finite number instead of NaN.
+                const v = Number.isFinite(+value) ? +value : (Number.isFinite(+p.min) ? +p.min : 0);
                 // Optional inline preview (e.g. hue swatch) sits just to the
                 // left of the numeric value so it updates with the slider.
                 const previewHtml = p.preview === 'hue'
-                    ? `<span class="hue-swatch" data-swatch="${effectKey}-${p.key}" style="background: ${_hueToCss(value)};"></span>`
+                    ? `<span class="hue-swatch" data-swatch="${effectKey}-${p.key}" style="background: ${_hueToCss(v)};"></span>`
                     : '';
                 return `
                     <label class="slider">
                         <span class="row">
                             <span>${p.key}</span>
-                            <span class="val" data-val="${effectKey}-${p.key}">${previewHtml}<span data-num="${effectKey}-${p.key}">${this._formatNumber(value, p)}</span></span>
+                            <span class="val" data-val="${effectKey}-${p.key}">${previewHtml}<span data-num="${effectKey}-${p.key}">${this._formatNumber(v, p)}</span></span>
                         </span>
-                        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${value}" ${attrs} data-min="${p.min}" data-max="${p.max}" data-step="${p.step}" data-suffix="${p.suffix ?? ''}" data-preview="${p.preview ?? ''}">
+                        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}" ${attrs} data-min="${p.min}" data-max="${p.max}" data-step="${p.step}" data-suffix="${p.suffix ?? ''}" data-preview="${p.preview ?? ''}">
                     </label>
                 `;
             }

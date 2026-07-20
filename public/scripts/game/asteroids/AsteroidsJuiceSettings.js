@@ -45,14 +45,19 @@ export default class AsteroidsJuiceSettings extends JuiceSettings {
 				}
 			},
 			destroyShip: {
+				// Normalized to the engine's standard shake params (was the old
+				// intensity/rotation form, which left amplitude/frequency/fade
+				// undefined — NaN in the editor and unread by the effector).
 				shake: {
 					active: false,
 					xAxis: true,
 					yAxis: true,
-					rotation: false,
-					duration: 2,
-					intensity: 0.5,
-					form: "noise"
+					amplitude: 0.5,
+					frequency: 10,
+					duration: 1.5,
+					form: "noise",
+					fade: "exponential",
+					inheritVelocity: false
 				},
 				timeSlow: {
 					active: false,

@@ -89,16 +89,18 @@ export default class ExtrasEditor {
                         ${p.label || p.key}
                     </label>`;
             case 'range': {
+                // Fall back to min for an absent/non-numeric value (no NaN).
+                const v = Number.isFinite(+value) ? +value : (Number.isFinite(+p.min) ? +p.min : 0);
                 const previewHtml = p.preview === 'hue'
-                    ? `<span class="hue-swatch" data-swatch="${block}-${p.key}" style="background: ${_hueToCss(value)};"></span>`
+                    ? `<span class="hue-swatch" data-swatch="${block}-${p.key}" style="background: ${_hueToCss(v)};"></span>`
                     : '';
                 return `
                     <label class="slider">
                         <span class="row">
                             <span>${p.label || p.key}</span>
-                            <span class="val">${previewHtml}<span data-num="${block}-${p.key}">${this._fmt(value, p)}</span></span>
+                            <span class="val">${previewHtml}<span data-num="${block}-${p.key}">${this._fmt(v, p)}</span></span>
                         </span>
-                        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${value}" ${attrs}
+                        <input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}" ${attrs}
                                data-step="${p.step}" data-suffix="${p.suffix ?? ''}" data-preview="${p.preview ?? ''}">
                     </label>`;
             }
