@@ -92,25 +92,38 @@ export default class JuiceEditor {
         this.panelEl = panelEl;
         // Dynamic select option sources by key, e.g. { sounds: () => [...names] }.
         this.optionSources = options.optionSources || {};
+        // Restrict which effect types this editor shows, so the same machinery
+        // can drive a separate panel per concern (e.g. sound vs. visual juice).
+        this.only = options.only || null;         // whitelist of effect keys
+        this.exclude = options.exclude || null;   // blacklist of effect keys
+        this.title = options.title || 'juice';
+        this.showSave = options.save !== false;
         this.events = this._listEvents();
         this.selectedEvent = this.events[0] ?? null;
         this._render();
     }
 
+    // Does this editor render the given effect key?
+    _handles(key) {
+        if (this.only) return this.only.includes(key);
+        if (this.exclude) return !this.exclude.includes(key);
+        return true;
+    }
+
     _listEvents() {
-        // An "event" is any container key that holds at least one known effect.
-        // This excludes config blocks like 'cheats' and 'sillyColors'.
+        // An "event" is any container key that holds at least one known effect
+        // this editor handles. Excludes config blocks like 'cheats'.
         return Object.keys(this.juiceSettings.container).filter((k) => {
             const v = this.juiceSettings.container[k];
             if (!v || typeof v !== 'object') return false;
-            return Object.keys(v).some((eff) => eff in EFFECT_SCHEMAS);
+            return Object.keys(v).some((eff) => eff in EFFECT_SCHEMAS && this._handles(eff));
         });
     }
 
     _render() {
         const events = this.events;
         if (events.length === 0) {
-            this.panelEl.innerHTML = `<h2>juice</h2><p class="hint">No events configured.</p>`;
+            this.panelEl.innerHTML = `<h2>${this.title}</h2><p class="hint">No events configured.</p>`;
             return;
         }
         const optionsHtml = events
@@ -120,12 +133,12 @@ export default class JuiceEditor {
         // reachable. In a static deploy juice.json is committed to the repo
         // and shipped read-only, so hide the button + status row.
         const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-        const saveHtml = isDev
-            ? `<button data-ctrl="save" class="primary">save juice settings</button>
+        const saveHtml = (isDev && this.showSave)
+            ? `<button data-ctrl="save" class="primary">save ${this.title} settings</button>
                <div data-region="save-status" class="hint" style="min-height: 1em; margin: -8px 0 12px;"></div>`
             : '';
         this.panelEl.innerHTML = `
-            <h2>juice</h2>
+            <h2>${this.title}</h2>
             ${saveHtml}
             <label>
                 <span class="row" style="display:block; margin-bottom:6px; color:#8a867a;">event</span>
@@ -173,7 +186,7 @@ export default class JuiceEditor {
         const eventSettings = this.juiceSettings.container[this.selectedEvent] || {};
         // Render every effect that has both a schema and a settings entry.
         const html = Object.entries(EFFECT_SCHEMAS)
-            .filter(([effectKey]) => eventSettings[effectKey])
+            .filter(([effectKey]) => eventSettings[effectKey] && this._handles(effectKey))
             .map(([effectKey, schema]) => {
                 const paramSettings = this._paramSettingsFor(effectKey, schema);
                 if (!paramSettings) return '';

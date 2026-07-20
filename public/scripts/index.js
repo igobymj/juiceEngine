@@ -98,14 +98,23 @@ const burst = {
     });
   },
   onActivate(gs) {
-    // Mount this app's juice editor. The sound clip dropdown is populated live
-    // from this session's registered sound names.
-    new JuiceEditor(gs.juiceSettings, document.getElementById('right-panel'), {
+    // Sound gets its own panel; the juice editor covers the visual effects.
+    // Both drive the same juiceSettings container — the juice panel's Save
+    // persists everything (including sound), so the sound panel omits Save.
+    new JuiceEditor(gs.juiceSettings, document.getElementById('sound-editor'), {
+      title: 'sound',
+      only: ['sound'],
+      save: false,
       optionSources: { sounds: () => gs.soundManager.names() },
+    });
+    new JuiceEditor(gs.juiceSettings, document.getElementById('juice-editor'), {
+      title: 'juice',
+      exclude: ['sound'],
     });
   },
   onDeactivate() {
-    document.getElementById('right-panel').innerHTML = '';
+    document.getElementById('sound-editor').innerHTML = '';
+    document.getElementById('juice-editor').innerHTML = '';
   },
 };
 
