@@ -36,10 +36,13 @@ export default class SampleSoundObject extends SoundObject {
 		this.__loaded = false;
 	}
 
-	play() {
-		if (this.__loaded && this.__player.state !== "started") {
-			this.__player.start();
-		}
+	play(opts = {}) {
+		if (!this.__loaded) return;
+		if (opts.volume != null) this.__output.set({ volume: opts.volume });
+		if (opts.rate != null) this.__player.playbackRate = opts.rate;
+		// Restart from the top so rapid re-triggers still sound.
+		this.__player.stop();
+		this.__player.start();
 	}
 
 	stop() {

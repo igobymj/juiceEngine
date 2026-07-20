@@ -73,12 +73,25 @@ const EFFECT_SCHEMAS = {
             { key: 'interval', type: 'range', min: 30, max: 300, step: 10, suffix: 'ms' },
         ],
     },
+    // Assign a sound to an event, just like a visual effect. `clip` options are
+    // resolved live from the registered sound names via optionSources.sounds
+    // (passed to the editor), so newly-registered clips show up automatically.
+    sound: {
+        label: 'sound',
+        params: [
+            { key: 'clip', type: 'select', optionsKey: 'sounds' },
+            { key: 'volume', type: 'range', min: -40, max: 6, step: 1, suffix: 'dB' },
+            { key: 'rate', type: 'range', min: 0.5, max: 2, step: 0.05 },
+        ],
+    },
 };
 
 export default class JuiceEditor {
-    constructor(juiceSettings, panelEl) {
+    constructor(juiceSettings, panelEl, options = {}) {
         this.juiceSettings = juiceSettings;
         this.panelEl = panelEl;
+        // Dynamic select option sources by key, e.g. { sounds: () => [...names] }.
+        this.optionSources = options.optionSources || {};
         this.events = this._listEvents();
         this.selectedEvent = this.events[0] ?? null;
         this._render();
@@ -227,7 +240,7 @@ export default class JuiceEditor {
                 `;
             }
             case 'select': {
-                const opts = p.options
+                const opts = this._optionsFor(p)
                     .map((o) => `<option value="${o}" ${this._optionMatches(o, value) ? 'selected' : ''}>${o}</option>`)
                     .join('');
                 return `
@@ -246,6 +259,16 @@ export default class JuiceEditor {
                 `;
         }
         return '';
+    }
+
+    // Static `options` on the schema, else a dynamic list resolved from
+    // optionSources[optionsKey] (e.g. the live set of registered sound names).
+    _optionsFor(p) {
+        if (p.options) return p.options;
+        if (p.optionsKey && this.optionSources[p.optionsKey]) {
+            return this.optionSources[p.optionsKey]() || [];
+        }
+        return [];
     }
 
     // 'none' in the schema maps to a falsy value in the settings; treat them

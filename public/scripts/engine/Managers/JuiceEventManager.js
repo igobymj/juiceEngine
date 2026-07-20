@@ -24,6 +24,7 @@ import ParticleSystem from "../Effects/ParticleEffects/ParticleSystem.js";
 import TimeSlowEffector from "../Effects/TimeEffects/TimeSlowEffector.js";
 import DeconstructEffector from "../Effects/Deconstruct/DeconstructEffector.js";
 import FloatingScoreEffector from "../Effects/Score/FloatingScoreEffector.js";
+import SoundEffector from "../Effects/Sound/SoundEffector.js";
 
 // Maps effect names to their effector classes.
 // Each class constructor follows the signature: (gameSession, eventName, triggerObject)
@@ -34,6 +35,7 @@ const effectTypes = {
 	timeSlow: TimeSlowEffector,
 	deconstruct: DeconstructEffector,
 	floatingScore: FloatingScoreEffector,
+	sound: SoundEffector,
 };
 
 export default class JuiceEventManager extends Manager {

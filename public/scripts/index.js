@@ -15,6 +15,7 @@
 import AppShell from "./engine/AppShell.js";
 import System from "./engine/System.js";
 import JuiceEditor from "./editor/JuiceEditor.js";
+import SynthSound from "./engine/sounds/SynthSound.js";
 
 const PANEL_WIDTH = 300;
 const TAB_H = 46;
@@ -63,6 +64,7 @@ const burst = {
         },
         particles: { active: true, particleSystem: 'burst' },
         timeSlow: { active: false, scale: 0.4, duration: 0.2 },
+        sound: { active: true, clip: 'blip', volume: -6, rate: 1 },
       },
     });
     gs.juiceSettings.extendParticleSystems({
@@ -81,6 +83,10 @@ const burst = {
       if (savedJuice.particleSystems) gs.juiceSettings.extendParticleSystems(savedJuice.particleSystems);
     }
 
+    // Register a procedural clip so the 'sound' effect above has something to
+    // play (and so it appears in the editor's clip dropdown).
+    gs.soundManager.registerSound('blip', new SynthSound(gs, { note: 'C2', volume: -4 }));
+
     const target = new BurstTarget(gs);
     gs.gameLoop.addUpdateSystem('target', target, 50);
     gs.gameLoop.addRenderSystem('target', target, 50);
@@ -92,8 +98,11 @@ const burst = {
     });
   },
   onActivate(gs) {
-    // Mount this app's juice editor (bound to this app's own juice settings).
-    new JuiceEditor(gs.juiceSettings, document.getElementById('right-panel'));
+    // Mount this app's juice editor. The sound clip dropdown is populated live
+    // from this session's registered sound names.
+    new JuiceEditor(gs.juiceSettings, document.getElementById('right-panel'), {
+      optionSources: { sounds: () => gs.soundManager.names() },
+    });
   },
   onDeactivate() {
     document.getElementById('right-panel').innerHTML = '';

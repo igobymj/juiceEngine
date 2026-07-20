@@ -44,6 +44,12 @@ export default class SoundManager extends Manager {
 		return this.__sounds[name];
 	}
 
+	// Names of all registered sounds — used to populate the juice editor's
+	// sound-clip dropdown.
+	names() {
+		return Object.keys(this.__sounds);
+	}
+
 	get sfxMix() {
 		return this.__sfxMix;
 	}

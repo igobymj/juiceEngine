@@ -27,6 +27,12 @@
         "active": false,
         "scale": 0.4,
         "duration": 0.2
+      },
+      "sound": {
+        "active": true,
+        "clip": "blip",
+        "volume": -6,
+        "rate": 1
       }
     }
   },
