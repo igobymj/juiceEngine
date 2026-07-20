@@ -122,6 +122,20 @@ const burst = {
   id: 'burst',
   title: 'burst',
   background: '#14131a',
+  // Game-specific "extras" — non-event settings this app exposes in the extras
+  // fold. Owned by the app, not the shell; apps that declare none get no fold.
+  extras: {
+    schema: {
+      cheats: { label: 'cheats', params: [{ key: 'juiceFx', type: 'bool' }] },
+      sillyColors: {
+        label: 'silly colors',
+        params: [
+          { key: 'active', type: 'bool' },
+          { key: 'particleHue', type: 'range', min: 0, max: 360, step: 1, preview: 'hue' },
+        ],
+      },
+    },
+  },
   build(gs) {
     gs.juiceSettings.extend({
       cheats: { juiceFx: true },
@@ -173,22 +187,7 @@ const burst = {
       },
     });
   },
-  onActivate(gs) {
-    // Demo of the native "extras" editor: non-event blocks burst already seeds
-    // (cheats.juiceFx + sillyColors) exposed as an 'extras' fold.
-    mountEditors(gs, undefined, {
-      schema: {
-        cheats: { label: 'cheats', params: [{ key: 'juiceFx', type: 'bool' }] },
-        sillyColors: {
-          label: 'silly colors',
-          params: [
-            { key: 'active', type: 'bool' },
-            { key: 'particleHue', type: 'range', min: 0, max: 360, step: 1, preview: 'hue' },
-          ],
-        },
-      },
-    });
-  },
+  onActivate(gs) { mountEditors(gs, undefined, burst.extras); },   // burst persists to juice.json
 };
 
 /* ---------- app: orbit ---------- */
@@ -226,7 +225,7 @@ const orbit = {
     gs.gameLoop.addRenderSystem('orbit', o, 50);
     gs.inputManager.addMouseHandler({ mousePressed() { o.reverse(); } });
   },
-  onActivate(gs) { mountEditors(gs, 'orbit'); },   // its own file, so it can't clobber juice.json
+  onActivate(gs) { mountEditors(gs, 'orbit', orbit.extras); },   // its own file, so it can't clobber juice.json
 };
 
 /* ---------- shell ---------- */
@@ -247,7 +246,7 @@ try {
 
 // primitives uses the shared juice/sound editor too (its own juice editor was
 // deprecated; the creature editor stays in its own panel).
-primitivesApp.onActivate = (gs) => mountEditors(gs, 'primitives');
+primitivesApp.onActivate = (gs) => mountEditors(gs, 'primitives', primitivesApp.extras);
 
 let shell;
 shell = new AppShell({
