@@ -101,6 +101,11 @@ export default class JuiceEditor {
         this.showSave = options.save !== false;
         this.showHeading = options.heading !== false;   // fold headers can supply the title instead
         this.onChange = options.onChange || null;        // fired on any control edit (dirty tracking)
+        // Fired on any control edit with the current event name, so the host can
+        // replay the event as a live preview. Throttled (see _preview) so a
+        // slider drag previews continuously without machine-gunning.
+        this.onPreview = options.onPreview || null;
+        this._lastPreview = 0;
         // Where save() posts: default the shared /api/juice, or /api/config/<name>
         // so different apps persist to their own file.
         this.saveUrl = options.saveName ? ('/api/config/' + options.saveName) : '/api/juice';
@@ -324,6 +329,16 @@ export default class JuiceEditor {
         return `${(+value).toFixed(digits)}${suffix}`;
     }
 
+    // Replay the currently-edited event as a preview. Throttled so a continuous
+    // slider drag fires ~8×/s rather than every input event.
+    _preview(eventKey) {
+        if (!this.onPreview || !eventKey) return;
+        const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+        if (now - this._lastPreview < 120) return;
+        this._lastPreview = now;
+        this.onPreview(eventKey);
+    }
+
     _wireParam(node) {
         const effect = node.dataset.effect;
         const param = node.dataset.param;
@@ -339,6 +354,7 @@ export default class JuiceEditor {
                 this.juiceSettings.updateJuice(eventKey, effect, param, value);
             }
             if (this.onChange) this.onChange();
+            this._preview(eventKey);
         };
         if (type === 'bool') {
             node.addEventListener('change', (e) => apply(!!e.target.checked));

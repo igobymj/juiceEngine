@@ -130,8 +130,11 @@ export default class JuiceEventManager extends Manager {
 			return new EffectorClass(this.gameSession, eventName, triggerObject);
 		}
 
-		console.log("error creating effect: " + eventName + " " + effectName);
-		return false;
+		// Settings-only "effects" (e.g. zoneJitter/proximityJitter read each
+		// frame elsewhere) have no effector. Return null so addNew's `!= null`
+		// guard skips them — returning false would push false and crash update().
+		if (this.gameSession.verbose) console.log("no effector for effect: " + eventName + " " + effectName);
+		return null;
 	}
 
 	// getters/setters

@@ -46,13 +46,24 @@ function mountEditors(gs, saveName) {
   const juiceFold = new FoldMenu(editor, 'juice', { open: false, save: true });
   const soundFold = new FoldMenu(editor, 'sound', { open: false, save: true });
 
+  // Adjusting any control replays the edited event at canvas center as a live
+  // preview — hear the sound / see the burst without leaving the panel.
+  const preview = (eventName) => {
+    gs.juiceEventManager.addNew(eventName, {
+      position: { x: gs.canvasWidth / 2, y: gs.canvasHeight / 2 },
+      velocity: { x: 0, y: 0 },
+    });
+  };
+
   const juiceEd = new JuiceEditor(gs.juiceSettings, juiceFold.body, {
     exclude: ['sound'], heading: false, save: false, saveName,
     onChange: () => juiceFold.setDirty(true),
+    onPreview: preview,
   });
   new JuiceEditor(gs.juiceSettings, soundFold.body, {
     only: ['sound'], heading: false, save: false, saveName,
     onChange: () => soundFold.setDirty(true),
+    onPreview: preview,
     optionSources: {
       synths: () => gs.soundManager.names().filter((n) => !clipFiles.includes(n)),
       clips: () => ['none', ...clipFiles],
