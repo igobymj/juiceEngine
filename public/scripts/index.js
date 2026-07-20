@@ -15,6 +15,7 @@
 import AppShell from "./engine/AppShell.js";
 import System from "./engine/System.js";
 import JuiceEditor from "./editor/JuiceEditor.js";
+import ExtrasEditor from "./editor/ExtrasEditor.js";
 import FoldMenu from "./editor/FoldMenu.js";
 import SynthSound from "./engine/sounds/SynthSound.js";
 import SampleSoundObject from "./engine/sounds/SampleSoundObject.js";
@@ -39,7 +40,7 @@ document.addEventListener('click', resumeAudio);
 // active app's own juiceSettings. Available for every app (primitives uses its
 // own UI, so #editor is hidden there). `saveName` keeps each app's persistence
 // separate (default → juice.json; else /api/config/<saveName>.json).
-function mountEditors(gs, saveName) {
+function mountEditors(gs, saveName, extras) {
   const editor = document.getElementById('editor');
   editor.innerHTML = '';
 
@@ -70,13 +71,29 @@ function mountEditors(gs, saveName) {
     },
   });
 
+  // Optional third fold: non-event "extras" (music, colors, cheats, toggles).
+  // They live in the same container, so they persist via the shared save; this
+  // editor only reports dirtiness and runs any per-change side effects.
+  let extrasFold = null;
+  if (extras && extras.schema) {
+    extrasFold = new FoldMenu(editor, 'extras', { open: false, save: true });
+    new ExtrasEditor(gs.juiceSettings, extrasFold.body, {
+      schema: extras.schema, heading: false,
+      optionSources: extras.optionSources,
+      onApply: extras.onApply,
+      onChange: () => extrasFold.setDirty(true),
+    });
+  }
+
   const saveAll = async () => {
     await juiceEd.save();
     juiceFold.setDirty(false);
     soundFold.setDirty(false);
+    if (extrasFold) extrasFold.setDirty(false);
   };
   juiceFold.onSave = saveAll;
   soundFold.onSave = saveAll;
+  if (extrasFold) extrasFold.onSave = saveAll;
 }
 
 /* ---------- app: burst ---------- */
@@ -156,7 +173,22 @@ const burst = {
       },
     });
   },
-  onActivate(gs) { mountEditors(gs); },   // burst persists to the default juice.json
+  onActivate(gs) {
+    // Demo of the native "extras" editor: non-event blocks burst already seeds
+    // (cheats.juiceFx + sillyColors) exposed as an 'extras' fold.
+    mountEditors(gs, undefined, {
+      schema: {
+        cheats: { label: 'cheats', params: [{ key: 'juiceFx', type: 'bool' }] },
+        sillyColors: {
+          label: 'silly colors',
+          params: [
+            { key: 'active', type: 'bool' },
+            { key: 'particleHue', type: 'range', min: 0, max: 360, step: 1, preview: 'hue' },
+          ],
+        },
+      },
+    });
+  },
 };
 
 /* ---------- app: orbit ---------- */
