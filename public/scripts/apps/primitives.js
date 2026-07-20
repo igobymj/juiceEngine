@@ -101,6 +101,7 @@ export default {
         },
         particles: { active: true, particleSystem: 'attachBurst' },
         timeSlow: { active: false, scale: 0.4, duration: 0.2 },
+        sound: { active: false, synth: 'blip', clip: 'none', volume: -8, rate: 1 },
       },
       // Fired by InkManager when a blot splats in garden mode.
       'ink splat': {
