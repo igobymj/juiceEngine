@@ -157,3 +157,6 @@ body.app-primitives.mode-editor #editor { display: none; }
 #editor-panel { top: calc(var(--tab-h) + 40px) !important; height: calc(100vh - var(--tab-h) - 40px) !important; }
 body:not(.app-primitives) #mode-tabs,
 body:not(.app-primitives) #editor-panel { display: none !important; }
+/* primitives has its own 40px header (mode tabs); push the shared editor below
+   it so the header doesn't cover the fold menus. */
+body.app-primitives #editor { top: 40px; }
