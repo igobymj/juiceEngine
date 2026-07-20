@@ -25,7 +25,11 @@ export default class bulletManager extends Manager {
 	fireBullet( position, rotation ) {
         if (this.bullets.length < this.__ammoLimit) {
             this.bullets.push(new Bullet(this.gameSession, position, rotation));
-            this.gameSession.soundManager.playBullet();
+            // Data-driven fire sound (see AsteroidsJuiceSettings.bulletFire).
+            this.gameSession.juiceEventManager.addNew("bulletFire", {
+                position: this.gameSession.p5.createVector(position.x, position.y),
+                velocity: this.gameSession.p5.createVector(0, 0)
+            });
         }
 	}
 

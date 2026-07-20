@@ -77,6 +77,25 @@ export default class AsteroidsJuiceSettings extends JuiceSettings {
 					duration: 1.0,
 					fade: true,
 					drag: 0.98
+				},
+				// Explosion is now data-driven (was AsteroidManager's imperative
+				// playExplosion). Editable/assignable in the sound fold.
+				sound: {
+					active: true,
+					synth: "explosion",
+					clip: "none",
+					volume: -6,
+					rate: 1
+				}
+			},
+			// Bullet-fire sound, data-driven (was BulletManager's playBullet).
+			bulletFire: {
+				sound: {
+					active: true,
+					synth: "bullet",
+					clip: "none",
+					volume: -6,
+					rate: 1
 				}
 			},
 			scoreIncrement: {
