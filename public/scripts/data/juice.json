@@ -1,7 +1,17 @@
 {
   "container": {
     "cheats": {
-      "juiceFx": true
+      "juiceFx": true,
+      "ship": {
+        "invincibility": true
+      },
+      "score": {
+        "pulse": false,
+        "pulseScale": 1.3,
+        "multiplier": 1,
+        "fontSize": 64,
+        "slotMachine": false
+      }
     },
     "sillyColors": {
       "active": false,
@@ -12,7 +22,7 @@
         "active": true,
         "xAxis": true,
         "yAxis": true,
-        "amplitude": 0.5,
+        "amplitude": 0.56,
         "frequency": 10,
         "duration": 0.35,
         "form": "sine",
@@ -37,6 +47,21 @@
     }
   },
   "particleSystems": {
+    "particleTest": {
+      "vectorParticle": {
+        "shape": "circle",
+        "count": 15,
+        "size": 10,
+        "pattern": "radial",
+        "rotation": "random",
+        "rotationSpeed": 5,
+        "particleLife": 2,
+        "initialVelocityRandom": false,
+        "initialVelocity": 30,
+        "fade": true,
+        "followObject": false
+      }
+    },
     "burst": {
       "vectorParticle": {
         "shape": "circle",
@@ -45,7 +70,7 @@
         "pattern": "radial",
         "rotation": "random",
         "rotationSpeed": 4,
-        "particleLife": 1.0,
+        "particleLife": 1,
         "initialVelocityRandom": true,
         "initialVelocity": 42,
         "fade": true,

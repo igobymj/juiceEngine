@@ -98,23 +98,23 @@ const burst = {
     });
   },
   onActivate(gs) {
-    // Two independent foldable menus in the right-edge editor. Both drive the
-    // same juiceSettings container, so a change in either marks both dirty, and
-    // saving from either header persists everything and clears both. The save
-    // affordance lives in each header and only appears once something changes.
+    // Two independent foldable menus in the right-edge editor. Dirty is tracked
+    // per menu — editing juice lights only the juice save, editing sound only
+    // the sound save. Save writes the whole shared container (so it persists
+    // everything and clears both), but each header only lights for its own edits.
     const editor = document.getElementById('editor');
     editor.innerHTML = '';
 
     const juiceFold = new FoldMenu(editor, 'juice', { open: true, save: true });
     const soundFold = new FoldMenu(editor, 'sound', { open: true, save: true });
 
-    const markDirty = () => { juiceFold.setDirty(true); soundFold.setDirty(true); };
-
     const juiceEd = new JuiceEditor(gs.juiceSettings, juiceFold.body, {
-      exclude: ['sound'], heading: false, save: false, onChange: markDirty,
+      exclude: ['sound'], heading: false, save: false,
+      onChange: () => juiceFold.setDirty(true),
     });
     new JuiceEditor(gs.juiceSettings, soundFold.body, {
-      only: ['sound'], heading: false, save: false, onChange: markDirty,
+      only: ['sound'], heading: false, save: false,
+      onChange: () => soundFold.setDirty(true),
       optionSources: { sounds: () => gs.soundManager.names() },
     });
 
