@@ -121,7 +121,7 @@ const burst = {
     const editor = document.getElementById('editor');
     editor.innerHTML = '';
 
-    const juiceFold = new FoldMenu(editor, 'juice', { open: true, save: true });
+    const juiceFold = new FoldMenu(editor, 'juice', { open: false, save: true });
     const soundFold = new FoldMenu(editor, 'sound', { open: false, save: true });
 
     const juiceEd = new JuiceEditor(gs.juiceSettings, juiceFold.body, {
