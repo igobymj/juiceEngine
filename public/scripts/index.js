@@ -25,10 +25,8 @@ import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPoint
 
 const PANEL_WIDTH = 300;
 
-// Procedural (synth) sounds this project registers, and audio clips found in
-// media/sounds (fetched below). These feed the sound menu's two dropdowns.
-// bullet/altBullet/explosion are harvested from juicyRocks.
-const SYNTHS = ['blip', 'bullet', 'altBullet', 'explosion'];
+// Audio clips found in media/sounds (fetched below). The sound menu's synth
+// list comes from each session's registered sounds; the clip list from here.
 let clipFiles = [];
 
 function resumeAudio() {
@@ -36,6 +34,39 @@ function resumeAudio() {
   document.removeEventListener('click', resumeAudio);
 }
 document.addEventListener('click', resumeAudio);
+
+// Mount the juice + sound fold editors into the right-edge #editor, bound to the
+// active app's own juiceSettings. Available for every app (primitives uses its
+// own UI, so #editor is hidden there). `saveName` keeps each app's persistence
+// separate (default → juice.json; else /api/config/<saveName>.json).
+function mountEditors(gs, saveName) {
+  const editor = document.getElementById('editor');
+  editor.innerHTML = '';
+
+  const juiceFold = new FoldMenu(editor, 'juice', { open: false, save: true });
+  const soundFold = new FoldMenu(editor, 'sound', { open: false, save: true });
+
+  const juiceEd = new JuiceEditor(gs.juiceSettings, juiceFold.body, {
+    exclude: ['sound'], heading: false, save: false, saveName,
+    onChange: () => juiceFold.setDirty(true),
+  });
+  new JuiceEditor(gs.juiceSettings, soundFold.body, {
+    only: ['sound'], heading: false, save: false, saveName,
+    onChange: () => soundFold.setDirty(true),
+    optionSources: {
+      synths: () => gs.soundManager.names().filter((n) => !clipFiles.includes(n)),
+      clips: () => ['none', ...clipFiles],
+    },
+  });
+
+  const saveAll = async () => {
+    await juiceEd.save();
+    juiceFold.setDirty(false);
+    soundFold.setDirty(false);
+  };
+  juiceFold.onSave = saveAll;
+  soundFold.onSave = saveAll;
+}
 
 /* ---------- app: burst ---------- */
 
@@ -114,41 +145,7 @@ const burst = {
       },
     });
   },
-  onActivate(gs) {
-    // Two independent foldable menus in the right-edge editor. Dirty is tracked
-    // per menu — editing juice lights only the juice save, editing sound only
-    // the sound save. Save writes the whole shared container (so it persists
-    // everything and clears both), but each header only lights for its own edits.
-    const editor = document.getElementById('editor');
-    editor.innerHTML = '';
-
-    const juiceFold = new FoldMenu(editor, 'juice', { open: false, save: true });
-    const soundFold = new FoldMenu(editor, 'sound', { open: false, save: true });
-
-    const juiceEd = new JuiceEditor(gs.juiceSettings, juiceFold.body, {
-      exclude: ['sound'], heading: false, save: false,
-      onChange: () => juiceFold.setDirty(true),
-    });
-    new JuiceEditor(gs.juiceSettings, soundFold.body, {
-      only: ['sound'], heading: false, save: false,
-      onChange: () => soundFold.setDirty(true),
-      optionSources: {
-        synths: () => SYNTHS,
-        clips: () => ['none', ...clipFiles],
-      },
-    });
-
-    const saveAll = async () => {
-      await juiceEd.save();
-      juiceFold.setDirty(false);
-      soundFold.setDirty(false);
-    };
-    juiceFold.onSave = saveAll;
-    soundFold.onSave = saveAll;
-  },
-  onDeactivate() {
-    document.getElementById('editor').innerHTML = '';
-  },
+  onActivate(gs) { mountEditors(gs); },   // burst persists to the default juice.json
 };
 
 /* ---------- app: orbit ---------- */
@@ -186,6 +183,7 @@ const orbit = {
     gs.gameLoop.addRenderSystem('orbit', o, 50);
     gs.inputManager.addMouseHandler({ mousePressed() { o.reverse(); } });
   },
+  onActivate(gs) { mountEditors(gs, 'orbit'); },   // its own file, so it can't clobber juice.json
 };
 
 /* ---------- shell ---------- */
@@ -215,8 +213,8 @@ shell = new AppShell({
   pointerGuard: (x, y, gs) => {
     if (y < 0) return true;
     if (!shell) return false;
-    if (shell.activeId === 'burst') return x > gs.canvasWidth - PANEL_WIDTH;
     if (shell.activeId === 'primitives') return primPointerGuard(x, y, gs);
-    return false;
+    // burst & orbit both show the right-edge editor.
+    return x > gs.canvasWidth - PANEL_WIDTH;
   },
 });

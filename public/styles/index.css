@@ -63,9 +63,9 @@ html, body {
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.5;
-  display: none;
 }
-body.app-burst #editor { display: block; }
+/* Shown for every app except primitives, which brings its own editor UI. */
+body.app-primitives #editor { display: none; }
 
 /* ---------- foldable menus ---------- */
 .fold {
