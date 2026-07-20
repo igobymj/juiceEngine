@@ -71,29 +71,27 @@ function mountEditors(gs, saveName, extras) {
     },
   });
 
-  // Optional third fold: non-event "extras" (music, colors, cheats, toggles).
-  // They live in the same container, so they persist via the shared save; this
+  // Third fold: non-event "extras" (music, colors, cheats, toggles). Always
+  // present; shows an empty state when the active game registered none. Extras
+  // live in the same container, so they persist via the shared save; this
   // editor only reports dirtiness and runs any per-change side effects.
-  let extrasFold = null;
-  if (extras && extras.schema) {
-    extrasFold = new FoldMenu(editor, 'extras', { open: false, save: true });
-    new ExtrasEditor(gs.juiceSettings, extrasFold.body, {
-      schema: extras.schema, heading: false,
-      optionSources: extras.optionSources,
-      onApply: extras.onApply,
-      onChange: () => extrasFold.setDirty(true),
-    });
-  }
+  const extrasFold = new FoldMenu(editor, 'extras', { open: false, save: true });
+  new ExtrasEditor(gs.juiceSettings, extrasFold.body, {
+    schema: (extras && extras.schema) || {}, heading: false,
+    optionSources: extras && extras.optionSources,
+    onApply: extras && extras.onApply,
+    onChange: () => extrasFold.setDirty(true),
+  });
 
   const saveAll = async () => {
     await juiceEd.save();
     juiceFold.setDirty(false);
     soundFold.setDirty(false);
-    if (extrasFold) extrasFold.setDirty(false);
+    extrasFold.setDirty(false);
   };
   juiceFold.onSave = saveAll;
   soundFold.onSave = saveAll;
-  if (extrasFold) extrasFold.onSave = saveAll;
+  extrasFold.onSave = saveAll;
 }
 
 /* ---------- app: burst ---------- */
