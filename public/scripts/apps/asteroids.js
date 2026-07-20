@@ -23,6 +23,8 @@ import ThrusterSound from "../game/asteroids/sounds/ThrusterSound.js";
 import MusicManager from "../game/asteroids/sounds/MusicManager.js";
 import SampleSoundObject from "../engine/sounds/SampleSoundObject.js";
 
+const PANEL_WIDTH = 300;   // shared right-edge editor panel width (see index.css --panel-w)
+
 let savedJuice = null;   // persisted asteroids juice, loaded before build
 export function setSavedJuice(data) { savedJuice = data; }
 
@@ -149,9 +151,17 @@ export default {
   title: 'asteroids',
   background: '#000000',
 
-  // Non-event settings, surfaced in the shared "extras" fold.
+  // Non-event settings, surfaced in the shared "extras" fold. cheats first so
+  // the invincibility toggle is the first control under EXTRAS.
   extras: {
     schema: {
+      cheats: {
+        label: 'cheats',
+        params: [
+          { key: 'invincibility', type: 'bool', path: 'ship.invincibility' },
+          { key: 'juiceFx', type: 'bool' },
+        ],
+      },
       music: {
         label: 'music',
         params: [
@@ -183,13 +193,6 @@ export default {
         label: 'silly sounds',
         params: [{ key: 'pewpewpew', type: 'bool' }],
       },
-      cheats: {
-        label: 'cheats',
-        params: [
-          { key: 'juiceFx', type: 'bool' },
-          { key: 'invincibility', type: 'bool', path: 'ship.invincibility' },
-        ],
-      },
     },
     // onApply is bound to the session in onActivate (see index.js) via extraApply.
   },
@@ -209,6 +212,9 @@ export default {
     gs.registerManager('asteroidManager', new AsteroidManager(gs));
     gs.registerManager('bulletManager', new BulletManager(gs));
     gs.registerManager('scoreManager', new ScoreManager(gs));
+    // The shared editor panel overlays the right edge of the full-width canvas;
+    // inset the score so it sits in the visible play field, not behind it.
+    gs.scoreManager.rightInset = PANEL_WIDTH;
 
     // --- sounds ---
     setupSounds(gs);

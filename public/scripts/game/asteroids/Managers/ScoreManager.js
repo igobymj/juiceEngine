@@ -20,6 +20,10 @@ export default class ScoreManager extends Manager {
 		this.__displayScore = 0;
 		this.__pulseScale = 1.0;
 		this.__margin = 20;
+		// Right-edge inset so the score clears an overlaying editor panel (the
+		// shell's canvas is full-width; the panel sits on top of it). 0 = anchor
+		// to the true right edge. Set by the app when a panel is present.
+		this.__rightInset = 0;
 
 		// Cached from render() so addScore() can compute edge positions
 		// without calling p5 text functions during the update phase
@@ -49,7 +53,7 @@ export default class ScoreManager extends Manager {
 		const fontSize = this.__cachedFontSize;
 		const hw = this.__cachedTextW / 2;
 		const hh = fontSize / 2;
-		const cx = this.gameSession.canvasWidth - this.__margin - hw;
+		const cx = this.gameSession.canvasWidth - this.__rightInset - this.__margin - hw;
 		const cy = this.__margin + hh;
 
 		const scoreCenter = p.createVector(cx, cy);
@@ -159,7 +163,7 @@ export default class ScoreManager extends Manager {
 		p.fill(255);
 
 		// Fixed right edge anchor — stable regardless of digit count
-		const rx = this.gameSession.canvasWidth - this.__margin;
+		const rx = this.gameSession.canvasWidth - this.__rightInset - this.__margin;
 		const cy = this.__margin + baseFontSize / 2;
 
 		// Cache text width of display score for addScore edge calculation
@@ -192,5 +196,13 @@ export default class ScoreManager extends Manager {
 
 	set score(score) {
 		this.__score = score;
+	}
+
+	get rightInset() {
+		return this.__rightInset;
+	}
+
+	set rightInset(inset) {
+		this.__rightInset = inset;
 	}
 }
