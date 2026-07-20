@@ -37,6 +37,12 @@ export default class SoundObject{
 		console.warn("stop method from base SoundObject was called. This should be overloaded in the derived class.");
 	}
 
+	// Set output level in dB. Lets the SoundEffector apply an event's volume to
+	// any SoundObject-based synth without each subclass handling play options.
+	setVolume(db){
+		if (this.__output && this.__output.volume) this.__output.volume.value = db;
+	}
+
 	connect(node){
 		//TODO: Limit number of connections to 1 ?
 		this.__output.connect(node);

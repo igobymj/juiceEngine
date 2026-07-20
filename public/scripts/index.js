@@ -18,12 +18,16 @@ import JuiceEditor from "./editor/JuiceEditor.js";
 import FoldMenu from "./editor/FoldMenu.js";
 import SynthSound from "./engine/sounds/SynthSound.js";
 import SampleSoundObject from "./engine/sounds/SampleSoundObject.js";
+import DefaultBullet from "./engine/sounds/DefaultBullet.js";
+import AlternateBullet from "./engine/sounds/AlternateBullet.js";
+import DefaultExplosion from "./engine/sounds/DefaultExplosion.js";
 
 const PANEL_WIDTH = 300;
 
 // Procedural (synth) sounds this project registers, and audio clips found in
 // media/sounds (fetched below). These feed the sound menu's two dropdowns.
-const SYNTHS = ['blip'];
+// bullet/altBullet/explosion are harvested from juicyRocks.
+const SYNTHS = ['blip', 'bullet', 'altBullet', 'explosion'];
 let clipFiles = [];
 
 function resumeAudio() {
@@ -92,6 +96,9 @@ const burst = {
     // Register the procedural synth(s) and any audio clips from media/sounds so
     // the 'sound' effect can play them and the editor can list them.
     gs.soundManager.registerSound('blip', new SynthSound(gs, { note: 'C2', volume: -4 }));
+    gs.soundManager.registerSound('bullet', new DefaultBullet(gs));
+    gs.soundManager.registerSound('altBullet', new AlternateBullet(gs));
+    gs.soundManager.registerSound('explosion', new DefaultExplosion(gs));
     for (const f of clipFiles) {
       gs.soundManager.registerSound(f, new SampleSoundObject(gs, 'media/sounds/' + f, { volume: -6 }));
     }

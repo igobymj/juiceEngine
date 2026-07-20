@@ -18,6 +18,11 @@ export default class SoundEffector {
     const name = (params.clip && params.clip !== 'none') ? params.clip : params.synth;
     const sound = name ? sm.getSound(name) : null;
     if (sound && typeof sound.play === 'function') {
+      // SoundObject-based synths take volume via setVolume; SynthSound /
+      // SampleSoundObject take it through play() — cover both.
+      if (params.volume != null && typeof sound.setVolume === 'function') {
+        sound.setVolume(params.volume);
+      }
       sound.play({ volume: params.volume, rate: params.rate });
     }
   }
