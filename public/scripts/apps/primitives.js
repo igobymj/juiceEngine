@@ -20,6 +20,7 @@ import InkManager, { INK_TYPES } from "../game/InkManager.js";
 import GardenScatter from "../game/GardenScatter.js";
 import Editor from "../editor/Editor.js";
 import { renderText, measureText } from "../game/VectorText.js";
+import SynthSound from "../engine/sounds/SynthSound.js";
 
 const MODE_TAB_H = 40;     // primitives' mode tab bar height
 const PANEL_WIDTH = 260;   // editor panel width (juice panel is 300)
@@ -101,6 +102,15 @@ export default {
         particles: { active: true, particleSystem: 'attachBurst' },
         timeSlow: { active: false, scale: 0.4, duration: 0.2 },
       },
+      // Fired by InkManager when a blot splats in garden mode.
+      'ink splat': {
+        particles: { active: true, particleSystem: 'inkSplat' },
+        shake: {
+          active: false, xAxis: true, yAxis: true, amplitude: 0.2,
+          frequency: 12, duration: 0.2, form: 'sine', fade: 'exponential', inheritVelocity: false,
+        },
+        sound: { active: false, synth: 'blip', clip: 'none', volume: -8, rate: 1 },
+      },
     });
     gs.juiceSettings.extendParticleSystems({
       attachBurst: {
@@ -109,6 +119,14 @@ export default {
           rotationSpeed: 4, particleLife: 1.0, initialVelocityRandom: true, initialVelocity: 35,
           fade: true, followObject: false, inheritVelocity: false, gravity: false, fill: false,
           color: '#ffaa3c',
+        },
+      },
+      inkSplat: {
+        vectorParticle: {
+          shape: 'circle', count: 8, size: 4, pattern: 'radial', rotation: 'random',
+          rotationSpeed: 3, particleLife: 0.6, initialVelocityRandom: true, initialVelocity: 24,
+          fade: true, followObject: false, inheritVelocity: false, gravity: false, fill: true,
+          color: '#3a2a1a',
         },
       },
     });
@@ -121,7 +139,11 @@ export default {
     const creatureManager = new CreatureManager(gs);
     const foodManager = new FoodManager(gs, creatureManager);
     const inkManager = new InkManager(gs);
+    inkManager.splatEvent = 'ink splat';   // fire this juice event on each splat
     const gardenScatter = new GardenScatter(gs);
+
+    // A clip the ink-splat sound can use (assignable in the sound editor).
+    gs.soundManager.registerSound('blip', new SynthSound(gs, { note: 'C3', volume: -6 }));
 
     // NB: input (0) and juice (200) are already registered by the shell.
     gs.gameLoop.addUpdateSystem('ink', inkManager, 40);

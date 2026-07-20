@@ -377,6 +377,10 @@ export default class InkManager {
   constructor(gameSession) {
     this.gameSession = gameSession;
     this.enabled = false;       // modal: only runs in garden mode
+    // Optional juice event fired when a blot splats (lands and starts soaking).
+    // Only primary splats (planted blots / released beads, gen 0) fire it, so a
+    // spreading colony's cascade children don't spam it. Set by the app.
+    this.splatEvent = null;
     this._pausedAt = null;
     this.activeDrops = [];      // still soaking / growing
     this.committedDrops = [];   // finished — kept as contact targets
@@ -509,6 +513,11 @@ export default class InkManager {
     d.tendrils = (d.style === 'blot' || d.style === 'dot') ? null
       : d.style === 'branch' ? makeBranchTendrils(d)
       : makeTendrils(d);
+    // Fire the splat juice event for primary splats.
+    const jem = this.gameSession.juiceEventManager;
+    if (this.splatEvent && (d.gen || 0) === 0 && jem) {
+      jem.addNew(this.splatEvent, { position: { x: d.cx, y: d.cy }, velocity: { x: 0, y: 0 } });
+    }
   }
 
   _spawnBlot(x, y, color, style, parentReleaseRadius, gen, t, zone) {
