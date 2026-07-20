@@ -40,7 +40,8 @@
       },
       "sound": {
         "active": true,
-        "clip": "blip",
+        "synth": "blip",
+        "clip": "none",
         "volume": -6,
         "rate": 1
       }

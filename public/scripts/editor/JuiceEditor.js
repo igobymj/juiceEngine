@@ -79,7 +79,8 @@ const EFFECT_SCHEMAS = {
     sound: {
         label: 'sound',
         params: [
-            { key: 'clip', type: 'select', optionsKey: 'sounds' },
+            { key: 'synth', type: 'select', optionsKey: 'synths' },   // procedural sounds
+            { key: 'clip', type: 'select', optionsKey: 'clips' },     // audio files in media/sounds
             { key: 'volume', type: 'range', min: -40, max: 6, step: 1, suffix: 'dB' },
             { key: 'rate', type: 'range', min: 0.5, max: 2, step: 0.05 },
         ],

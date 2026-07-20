@@ -17,8 +17,14 @@ import System from "./engine/System.js";
 import JuiceEditor from "./editor/JuiceEditor.js";
 import FoldMenu from "./editor/FoldMenu.js";
 import SynthSound from "./engine/sounds/SynthSound.js";
+import SampleSoundObject from "./engine/sounds/SampleSoundObject.js";
 
 const PANEL_WIDTH = 300;
+
+// Procedural (synth) sounds this project registers, and audio clips found in
+// media/sounds (fetched below). These feed the sound menu's two dropdowns.
+const SYNTHS = ['blip'];
+let clipFiles = [];
 
 function resumeAudio() {
   if (window.Tone) Tone.start();
@@ -64,7 +70,7 @@ const burst = {
         },
         particles: { active: true, particleSystem: 'burst' },
         timeSlow: { active: false, scale: 0.4, duration: 0.2 },
-        sound: { active: true, clip: 'blip', volume: -6, rate: 1 },
+        sound: { active: true, synth: 'blip', clip: 'none', volume: -6, rate: 1 },
       },
     });
     gs.juiceSettings.extendParticleSystems({
@@ -83,9 +89,12 @@ const burst = {
       if (savedJuice.particleSystems) gs.juiceSettings.extendParticleSystems(savedJuice.particleSystems);
     }
 
-    // Register a procedural clip so the 'sound' effect above has something to
-    // play (and so it appears in the editor's clip dropdown).
+    // Register the procedural synth(s) and any audio clips from media/sounds so
+    // the 'sound' effect can play them and the editor can list them.
     gs.soundManager.registerSound('blip', new SynthSound(gs, { note: 'C2', volume: -4 }));
+    for (const f of clipFiles) {
+      gs.soundManager.registerSound(f, new SampleSoundObject(gs, 'media/sounds/' + f, { volume: -6 }));
+    }
 
     const target = new BurstTarget(gs);
     gs.gameLoop.addUpdateSystem('target', target, 50);
@@ -115,7 +124,10 @@ const burst = {
     new JuiceEditor(gs.juiceSettings, soundFold.body, {
       only: ['sound'], heading: false, save: false,
       onChange: () => soundFold.setDirty(true),
-      optionSources: { sounds: () => gs.soundManager.names() },
+      optionSources: {
+        synths: () => SYNTHS,
+        clips: () => ['none', ...clipFiles],
+      },
     });
 
     const saveAll = async () => {
@@ -170,11 +182,15 @@ const orbit = {
 
 /* ---------- shell ---------- */
 
-// Load burst's persisted juice before building anything.
+// Load burst's persisted juice, and enumerate the audio clips, before building.
 try {
   const res = await fetch('public/scripts/data/juice.json');
   if (res.ok) savedJuice = await res.json();
 } catch (e) { /* defaults */ }
+try {
+  const res = await fetch('/api/sounds');
+  if (res.ok) clipFiles = await res.json();
+} catch (e) { /* no clips dir / not dev server */ }
 
 let shell;
 shell = new AppShell({

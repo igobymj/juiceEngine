@@ -3,19 +3,22 @@
  *
  * A juice effector like the visual ones, so a sound is assigned to an event in
  * exactly the same data-driven way: give the event a `sound` block
- *   sound: { active: true, clip: 'blip', volume: -6, rate: 1 }
- * and JuiceEventManager instantiates this on fire. It plays the clip named by
- * `clip` from the SoundManager, then reports finished immediately (one-shot).
+ *   sound: { active: true, synth: 'blip', clip: 'none', volume: -6, rate: 1 }
+ * and JuiceEventManager instantiates this on fire. A chosen `clip` (an audio
+ * file from media/sounds) wins; otherwise it plays the `synth` (a procedural
+ * sound). Then it reports finished immediately (one-shot).
  *
- * A "clip" is anything the SoundManager holds that exposes play({volume,rate}).
+ * Both are looked up by name in the SoundManager; each exposes play({volume,rate}).
  */
 export default class SoundEffector {
   constructor(gameSession, eventName, triggerObject) {
     const params = gameSession.juiceSettings.container[eventName].sound;
     const sm = gameSession.soundManager;
-    const clip = sm && params && params.clip ? sm.getSound(params.clip) : null;
-    if (clip && typeof clip.play === 'function') {
-      clip.play({ volume: params.volume, rate: params.rate });
+    if (!sm || !params) return;
+    const name = (params.clip && params.clip !== 'none') ? params.clip : params.synth;
+    const sound = name ? sm.getSound(name) : null;
+    if (sound && typeof sound.play === 'function') {
+      sound.play({ volume: params.volume, rate: params.rate });
     }
   }
 

@@ -30,6 +30,20 @@ app.post('/api/config/:name', (req, res) => writeConfig(req.params.name, req.bod
 // Back-compat: the juice editor still posts to /api/juice.
 app.post('/api/juice', (req, res) => writeConfig('juice', req.body, res));
 
+// Enumerate audio clips in media/sounds so the editor can list them. The files
+// are served statically from that path.
+app.get('/api/sounds', (req, res) => {
+  const dir = path.join(__dirname, 'media', 'sounds');
+  try {
+    const files = fs.existsSync(dir)
+      ? fs.readdirSync(dir).filter((f) => /\.(wav|mp3|ogg|m4a|aac|flac)$/i.test(f))
+      : [];
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 app.listen(port, () => {
   console.log(`juiceEngine running at http://localhost:${port}`);
 });
