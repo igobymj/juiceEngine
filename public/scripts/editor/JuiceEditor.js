@@ -55,7 +55,17 @@ const EFFECT_SCHEMAS = {
         label: 'time slow',
         params: [
             { key: 'scale', type: 'range', min: 0.05, max: 1, step: 0.05 },
-            { key: 'duration', type: 'range', min: 0, max: 1, step: 0.05, suffix: 's' },
+            { key: 'duration', type: 'range', min: 0, max: 4, step: 0.05, suffix: 's' },
+        ],
+    },
+    deconstruct: {
+        label: 'deconstruct',
+        params: [
+            { key: 'speed', type: 'range', min: 0, max: 120, step: 1 },
+            { key: 'rotationSpeed', type: 'range', min: 0, max: 20, step: 0.5 },
+            { key: 'duration', type: 'range', min: 0.1, max: 3, step: 0.1, suffix: 's' },
+            { key: 'drag', type: 'range', min: 0.9, max: 1, step: 0.005 },
+            { key: 'fade', type: 'bool' },
         ],
     },
     proximityJitter: {

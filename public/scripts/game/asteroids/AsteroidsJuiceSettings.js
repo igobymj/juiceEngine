@@ -65,8 +65,9 @@ export default class AsteroidsJuiceSettings extends JuiceSettings {
 					duration: 3.5,
 					stackable: true
 				},
+				// On by default so the ship visibly shatters on death.
 				deconstruct: {
-					active: false,
+					active: true,
 					speed: 40,
 					rotationSpeed: 0,
 					duration: 1.0,

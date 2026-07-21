@@ -202,6 +202,9 @@ export default {
     const ajs = new AsteroidsJuiceSettings();
     gs.juiceSettings.extend(ajs.container);
     gs.juiceSettings.extendParticleSystems(ajs.particleSystems);
+    // The engine's master juice switch defaults off; turn it on (burst/primitives
+    // do the same). Without this, addNew() bails and NO juice/sound fires.
+    gs.juiceSettings.extend({ cheats: { juiceFx: true } });
     if (savedJuice) {
       if (savedJuice.container) gs.juiceSettings.extend(savedJuice.container);
       if (savedJuice.particleSystems) gs.juiceSettings.extendParticleSystems(savedJuice.particleSystems);
