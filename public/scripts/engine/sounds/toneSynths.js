@@ -28,46 +28,6 @@ export const TONE_SYNTHS = {
     synth: Tone.MembraneSynth, note: '43Hz', duration: '8n',
     options: { octaves: 10, envelope: { sustain: 0, attack: 0.005, decay: 0.25 } },
   },
-  blip: {
-    synth: Tone.Synth, note: 'C5', duration: '32n',
-    options: { oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.10, sustain: 0, release: 0.10 } },
-  },
-  zap: {
-    synth: Tone.Synth, note: 'C6', duration: '32n',
-    options: { oscillator: { type: 'sawtooth' }, envelope: { attack: 0.001, decay: 0.08, sustain: 0, release: 0.05 } },
-  },
-  pluck: {
-    synth: Tone.PluckSynth, note: 'C4', duration: '8n',
-    options: { dampening: 4000, resonance: 0.9 },
-  },
-  bass: {
-    synth: Tone.MonoSynth, note: 'C2', duration: '8n',
-    options: {
-      oscillator: { type: 'square' },
-      envelope: { attack: 0.005, decay: 0.2, sustain: 0.2, release: 0.2 },
-      filterEnvelope: { attack: 0.005, decay: 0.1, sustain: 0.1, release: 0.2, baseFrequency: 120, octaves: 3 },
-    },
-  },
-  chime: {
-    synth: Tone.FMSynth, note: 'C5', duration: '4n',
-    options: { harmonicity: 3, modulationIndex: 10, envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.6 } },
-  },
-  stab: {
-    synth: Tone.AMSynth, note: 'C4', duration: '16n',
-    options: { harmonicity: 2, envelope: { attack: 0.002, decay: 0.15, sustain: 0, release: 0.1 } },
-  },
-  clank: {
-    synth: Tone.MetalSynth, note: 'C4', duration: '16n',
-    options: { harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5, envelope: { attack: 0.001, decay: 0.2, release: 0.1 } },
-  },
-  noise: {
-    synth: Tone.NoiseSynth, duration: '16n', pitched: false,
-    options: { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.15, sustain: 0 } },
-  },
-  sweep: {
-    synth: Tone.Synth, note: 'C3', duration: '4n',
-    options: { oscillator: { type: 'sine' }, envelope: { attack: 0.2, decay: 0.1, sustain: 0.3, release: 0.4 } },
-  },
 };
 
 // Engine-compatible one-shot wrapper around a single preset.
