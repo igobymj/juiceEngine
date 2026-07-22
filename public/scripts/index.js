@@ -26,6 +26,7 @@ import { registerToneSynths } from "./engine/sounds/toneSynths.js";
 import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPointerGuard } from "./apps/primitives.js";
 import asteroidsApp, { setSavedJuice as setAstJuice, extraApply as astExtraApply } from "./apps/asteroids.js";
 import rtdApp, { setSavedJuice as setRtdJuice } from "./apps/rtd.js";
+import RtdEditor from "./editor/RtdEditor.js";
 
 const PANEL_WIDTH = 300;
 
@@ -266,8 +267,21 @@ asteroidsApp.onActivate = (gs) => mountEditors(gs, 'asteroids', {
   onApply: (b, p, v) => astExtraApply(gs, b, p, v),
 });
 
-// RTD: shared editors; its own juice file (no extras yet).
-rtdApp.onActivate = (gs) => mountEditors(gs, 'rtd', rtdApp.extras);
+// RTD: its own object-type editor (akin to primitives') in the right panel,
+// rather than the shared juice/sound folds.
+rtdApp.onActivate = (gs) => {
+  new RtdEditor(gs.rtdManager, document.getElementById('editor'), {
+    soundNames: () => gs.soundManager.names(),
+    onCreate: () => {
+      const w = gs.canvasWidth, h = gs.canvasHeight;
+      gs.rtdManager.createObject({
+        x: w / 2 + (Math.random() - 0.5) * w * 0.4,
+        y: h / 2 + (Math.random() - 0.5) * h * 0.4,
+        bpm: 100, sound: 'kick',
+      });
+    },
+  });
+};
 
 let shell;
 shell = new AppShell({
