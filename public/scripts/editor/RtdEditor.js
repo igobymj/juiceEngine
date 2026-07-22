@@ -69,6 +69,11 @@ export default class RtdEditor {
         <input type="range" min="0.02" max="0.5" step="0.01" value="${o.relax}" data-ctrl="relax">
       </label>
 
+      <label class="slider">
+        <span class="row"><span>volume</span><span class="val" data-val="volume">${o.volume.toFixed(0)} dB</span></span>
+        <input type="range" min="-40" max="6" step="1" value="${o.volume}" data-ctrl="volume">
+      </label>
+
       <label>
         <span class="row" style="display:block; margin-bottom:4px;">color</span>
         <input type="color" value="${o.color}" data-ctrl="color">
@@ -104,6 +109,7 @@ export default class RtdEditor {
     slider('bpm', 'bpm', (v) => `${v.toFixed(0)} bpm`);
     slider('pulseScale', 'pulseScale', (v) => `${v.toFixed(2)}×`);
     slider('relax', 'relax', (v) => v.toFixed(2));
+    slider('volume', 'volume', (v) => `${v.toFixed(0)} dB`);
 
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; });
     $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; });

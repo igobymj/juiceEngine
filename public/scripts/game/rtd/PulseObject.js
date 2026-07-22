@@ -21,6 +21,7 @@ export default class PulseObject {
     this.pulseScale = opts.pulseScale ?? 1.6; // scale reached at the moment of a beat
     this.relax = opts.relax ?? 0.16;          // ease-back per frame toward rest (0..1)
     this.sound = opts.sound ?? 'kick';        // registered sound name to play on beat
+    this.volume = opts.volume ?? -6;          // per-object playback level (dB)
 
     // --- runtime state ---
     this.__scale = 1;
@@ -46,7 +47,9 @@ export default class PulseObject {
   pulse() {
     this.__scale = this.pulseScale;
     const snd = this.sound && this.gameSession.soundManager.getSound(this.sound);
-    if (snd && typeof snd.play === 'function') snd.play();
+    // Pass this object's volume so per-object levels apply even when several
+    // objects share one registered sound instance (set at trigger time).
+    if (snd && typeof snd.play === 'function') snd.play({ volume: this.volume });
   }
 
   render() {
