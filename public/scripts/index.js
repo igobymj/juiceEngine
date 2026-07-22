@@ -22,6 +22,7 @@ import SampleSoundObject from "./engine/sounds/SampleSoundObject.js";
 import DefaultBullet from "./engine/sounds/DefaultBullet.js";
 import AlternateBullet from "./engine/sounds/AlternateBullet.js";
 import DefaultExplosion from "./engine/sounds/DefaultExplosion.js";
+import { registerToneSynths } from "./engine/sounds/toneSynths.js";
 import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPointerGuard } from "./apps/primitives.js";
 import asteroidsApp, { setSavedJuice as setAstJuice, extraApply as astExtraApply } from "./apps/asteroids.js";
 import rtdApp, { setSavedJuice as setRtdJuice } from "./apps/rtd.js";
@@ -169,6 +170,8 @@ const burst = {
 
     // Register the procedural synth(s) and any audio clips from media/sounds so
     // the 'sound' effect can play them and the editor can list them.
+    // toneSynths first so burst's own 'blip' below still wins that name.
+    registerToneSynths(gs);
     gs.soundManager.registerSound('blip', new SynthSound(gs, { note: 'C2', volume: -4 }));
     gs.soundManager.registerSound('bullet', new DefaultBullet(gs));
     gs.soundManager.registerSound('altBullet', new AlternateBullet(gs));
