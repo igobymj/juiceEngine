@@ -24,6 +24,7 @@ import AlternateBullet from "./engine/sounds/AlternateBullet.js";
 import DefaultExplosion from "./engine/sounds/DefaultExplosion.js";
 import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPointerGuard } from "./apps/primitives.js";
 import asteroidsApp, { setSavedJuice as setAstJuice, extraApply as astExtraApply } from "./apps/asteroids.js";
+import rtdApp, { setSavedJuice as setRtdJuice } from "./apps/rtd.js";
 
 const PANEL_WIDTH = 300;
 
@@ -246,6 +247,10 @@ try {
   const res = await fetch('public/scripts/data/asteroids.json');
   if (res.ok) setAstJuice(await res.json());
 } catch (e) { /* asteroids defaults */ }
+try {
+  const res = await fetch('public/scripts/data/rtd.json');
+  if (res.ok) setRtdJuice(await res.json());
+} catch (e) { /* rtd defaults */ }
 
 // primitives uses the shared juice/sound editor too (its own juice editor was
 // deprecated; the creature editor stays in its own panel).
@@ -258,10 +263,13 @@ asteroidsApp.onActivate = (gs) => mountEditors(gs, 'asteroids', {
   onApply: (b, p, v) => astExtraApply(gs, b, p, v),
 });
 
+// RTD: shared editors; its own juice file (no extras yet).
+rtdApp.onActivate = (gs) => mountEditors(gs, 'rtd', rtdApp.extras);
+
 let shell;
 shell = new AppShell({
   parent: 'canvas',
-  apps: [burst, orbit, primitivesApp, asteroidsApp],
+  apps: [burst, orbit, primitivesApp, asteroidsApp, rtdApp],
   tabs: '#game-tabs',
   initial: 'burst',
   // Canvas coords are relative to the stage (below the tab bar), so a click on
