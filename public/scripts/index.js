@@ -27,6 +27,7 @@ import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPoint
 import asteroidsApp, { setSavedJuice as setAstJuice, extraApply as astExtraApply } from "./apps/asteroids.js";
 import rtdApp, { setSavedJuice as setRtdJuice } from "./apps/rtd.js";
 import RtdEditor from "./editor/RtdEditor.js";
+import { loadSvg, normalizeShapes, svgToVectorObjects } from "./engine/loaders/SvgImport.js";
 
 const PANEL_WIDTH = 300;
 
@@ -197,7 +198,7 @@ const burst = {
 /* ---------- app: orbit ---------- */
 
 class Orbit extends System {
-  constructor(gs) { super(gs); this.angle = 0; this.dir = 1; }
+  constructor(gs) { super(gs); this.angle = 0; this.dir = 1; this.svgObjects = null; }
   update() { this.angle += 0.02 * this.dir; }
   reverse() { this.dir *= -1; }
   render() {
@@ -211,11 +212,14 @@ class Orbit extends System {
     p.stroke(90, 120, 170); p.strokeWeight(1); p.noFill();
     p.circle(cx, cy, r * 2);
     p.noStroke();
-    p.fill(120, 150, 200); p.circle(cx, cy, 26);
     p.fill(230, 236, 246); p.circle(x, y, 30);
     p.fill(120, 140, 170); p.textAlign(p.CENTER, p.CENTER); p.textSize(14);
-    p.text('a different app entirely — click to reverse', cx, cy + r + 34);
+    p.text('imported from sample.svg — click to reverse', cx, cy + r + 34);
     p.pop();
+    // The imported SVG (vector objects), spinning at centre.
+    if (this.svgObjects) {
+      for (const o of this.svgObjects) { o.rotation = this.angle * 1.5; o.render(); }
+    }
   }
 }
 
@@ -228,6 +232,17 @@ const orbit = {
     gs.gameLoop.addUpdateSystem('orbit', o, 50);
     gs.gameLoop.addRenderSystem('orbit', o, 50);
     gs.inputManager.addMouseHandler({ mousePressed() { o.reverse(); } });
+
+    // Demo the SVG import pipeline: fetch, sample to point arrays, recentre/
+    // scale, build vector objects. Async — they appear once loaded.
+    loadSvg('media/svg/sample.svg', { sampleDistance: 2 })
+      .then(({ shapes }) => {
+        const norm = normalizeShapes(shapes, { targetSize: 150 });
+        o.svgObjects = svgToVectorObjects(gs, norm, {
+          x: gs.canvasWidth / 2, y: gs.canvasHeight / 2, strokeWeight: 2,
+        });
+      })
+      .catch((e) => console.warn('SVG import failed:', e));
   },
   onActivate(gs) { mountEditors(gs, 'orbit', orbit.extras); },   // its own file, so it can't clobber juice.json
 };
