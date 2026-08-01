@@ -28,7 +28,7 @@ export default class ScreenShakeEffector {
         this.__form = this.gameSession.juiceSettings.container[eventName].shake.form; // string, e.g. "sine" or "noise"
         this.__fade = this.gameSession.juiceSettings.container[eventName].shake.fade; // boolean
 
-        this.__intensity = this.__intensity * 12; // scales 0.0-1.0 amplitude to pixel offset
+        this.__intensity = this.__intensity * 48; // scales 0.0-1.0 amplitude to pixel offset
 
         // this determines the axis of shake effect. 
         if( this.gameSession.juiceSettings.container[eventName].shake.inheritVelocity === true) {

@@ -44,6 +44,21 @@ html, body {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Global mute toggle — pinned to the right end of the tab bar. */
+#mute-toggle {
+  margin-left: auto;                   /* push to the far right of the flex row */
+  margin-bottom: 4px;
+  background: #17161d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+#mute-toggle:hover { border-color: rgba(255, 255, 255, 0.18); }
+#mute-toggle[aria-pressed="true"] { background: #3a2018; }
+
 /* ---------- stage (the active game's window) ---------- */
 #stage {
   position: fixed;
@@ -51,6 +66,9 @@ html, body {
   background: var(--stage);
 }
 #canvas { position: absolute; inset: 0; }
+/* Promote the p5 canvas to its own GPU compositor layer. Can smooth present-time
+   judder on a large animated canvas (the cost the JS-side FPS can't see). */
+#canvas canvas { transform: translateZ(0); will-change: transform; }
 
 /* ---------- right-edge editor (per game; here only 'burst') ---------- */
 #editor {
@@ -160,3 +178,36 @@ body:not(.app-primitives) #editor-panel { display: none !important; }
 /* primitives has its own 40px header (mode tabs); push the shared editor below
    it so the header doesn't cover the fold menus. */
 body.app-primitives #editor { top: 40px; }
+
+/* ---------- RTD app UI: mode tabs (objects/game), gated to its app ---------- */
+#rtd-tabs {
+  position: fixed;
+  top: var(--tab-h); left: 0; right: 0;
+  height: 40px;
+  display: flex;
+  align-items: stretch;
+  padding: 0 12px;
+  background: rgba(20, 20, 24, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 6;
+}
+#rtd-tabs .tab {
+  background: transparent;
+  border: none;
+  color: #8a867a;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0 18px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+#rtd-tabs .tab:hover { color: #c8c4b6; }
+#rtd-tabs .tab.active { color: #e8e6e0; border-bottom-color: #6aa8d8; }
+body:not(.app-rtd) #rtd-tabs { display: none !important; }
+/* RTD has its own 40px mode-tab header; push the shared editor below it, and
+   hide the editor entirely in game mode (play, not edit). */
+body.app-rtd #editor { top: 40px; }
+body.app-rtd.mode-game #editor { display: none !important; }

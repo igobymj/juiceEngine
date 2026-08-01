@@ -6,8 +6,10 @@
  * registered handlers in registration order.
  *
  * Mouse handlers are objects with any subset of {mousePressed, mouseDragged,
- * mouseReleased}. Key handlers are functions (key) => void invoked on
- * one-shot keypresses (called from p5's keyPressed via `keyInput`).
+ * mouseReleased}. Key handlers are functions (key, code) => void invoked on
+ * one-shot keypresses (called from p5's keyPressed via `keyInput`). `code` is the
+ * KeyboardEvent.code (e.g. 'ArrowUp', 'ShiftRight') for handlers that need to tell
+ * physical keys apart — like left vs right shift, which share key === 'Shift'.
  *
  * Override `update()` in a subclass to poll held-key state via
  * this.gameSession.p5.keyIsDown(...).
@@ -80,9 +82,9 @@ export default class InputManager extends Manager {
     }
 
     // p5's one-shot key callback routes here.
-    keyInput(key) {
+    keyInput(key, code) {
         for (const h of this.__keyHandlers) {
-            h(key);
+            h(key, code);
         }
     }
 

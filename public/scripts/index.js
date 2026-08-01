@@ -13,6 +13,7 @@
  */
 
 import AppShell from "./engine/AppShell.js";
+import SoundManager from "./engine/Managers/SoundManager.js";
 import System from "./engine/System.js";
 import JuiceEditor from "./editor/JuiceEditor.js";
 import ExtrasEditor from "./editor/ExtrasEditor.js";
@@ -25,7 +26,7 @@ import DefaultExplosion from "./engine/sounds/DefaultExplosion.js";
 import { registerToneSynths } from "./engine/sounds/toneSynths.js";
 import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPointerGuard } from "./apps/primitives.js";
 import asteroidsApp, { setSavedJuice as setAstJuice, extraApply as astExtraApply } from "./apps/asteroids.js";
-import rtdApp, { setSavedJuice as setRtdJuice } from "./apps/rtd.js";
+import rtdApp, { setSavedState as setRtdState, setSavedJuice as setRtdJuice, pointerGuard as rtdPointerGuard, extraApply as rtdExtraApply } from "./apps/rtd.js";
 import RtdEditor from "./editor/RtdEditor.js";
 import { loadSvg, normalizeShapes, svgToVectorObjects } from "./engine/loaders/SvgImport.js";
 
@@ -34,6 +35,18 @@ const PANEL_WIDTH = 300;
 // Audio clips found in media/sounds (fetched below). The sound menu's synth
 // list comes from each session's registered sounds; the clip list from here.
 let clipFiles = [];
+
+// Music tracks found in media/music (fetched below), exposed as the RTD extras
+// music-track dropdown. Options: a 'None' entry plus one per file.
+let musicFiles = [];
+const musicTrackOptions = () => [
+  { value: 'none', label: 'None' },
+  ...musicFiles.map((f) => ({
+    value: 'media/music/' + f,
+    // Readable label: drop extension and any trailing "_<digits>", underscores→spaces.
+    label: f.replace(/\.[^.]+$/, '').replace(/_\d+$/, '').replace(/_/g, ' '),
+  })),
+];
 
 function resumeAudio() {
   if (window.Tone) Tone.start();
@@ -45,9 +58,13 @@ document.addEventListener('click', resumeAudio);
 // active app's own juiceSettings. Available for every app (primitives uses its
 // own UI, so #editor is hidden there). `saveName` keeps each app's persistence
 // separate (default → juice.json; else /api/config/<saveName>.json).
-function mountEditors(gs, saveName, extras) {
+function mountEditors(gs, saveName, extras, opts = {}) {
   const editor = document.getElementById('editor');
   editor.innerHTML = '';
+
+  // App-specific sections above the shared folds (RTD mounts an 'objects' fold
+  // here so editor mode can add prototype instances). Runs first so it sits on top.
+  if (opts.prepend) opts.prepend(editor);
 
   const juiceFold = new FoldMenu(editor, 'juice', { open: false, save: true });
   const soundFold = new FoldMenu(editor, 'sound', { open: false, save: true });
@@ -259,6 +276,10 @@ try {
   if (res.ok) clipFiles = await res.json();
 } catch (e) { /* no clips dir / not dev server */ }
 try {
+  const res = await fetch('/api/music');
+  if (res.ok) musicFiles = await res.json();
+} catch (e) { /* no music dir / not dev server */ }
+try {
   const res = await fetch('public/scripts/data/primitives.json');
   if (res.ok) setPrimJuice(await res.json());
 } catch (e) { /* primitives defaults */ }
@@ -268,8 +289,12 @@ try {
 } catch (e) { /* asteroids defaults */ }
 try {
   const res = await fetch('public/scripts/data/rtd.json');
-  if (res.ok) setRtdJuice(await res.json());
+  if (res.ok) setRtdState(await res.json());
 } catch (e) { /* rtd defaults */ }
+try {
+  const res = await fetch('public/scripts/data/rtdJuice.json');
+  if (res.ok) setRtdJuice(await res.json());
+} catch (e) { /* rtd juice defaults */ }
 
 // primitives uses the shared juice/sound editor too (its own juice editor was
 // deprecated; the creature editor stays in its own panel).
@@ -282,20 +307,138 @@ asteroidsApp.onActivate = (gs) => mountEditors(gs, 'asteroids', {
   onApply: (b, p, v) => astExtraApply(gs, b, p, v),
 });
 
-// RTD: its own object-type editor (akin to primitives') in the right panel,
-// rather than the shared juice/sound folds.
-rtdApp.onActivate = (gs) => {
-  new RtdEditor(gs.rtdManager, document.getElementById('editor'), {
-    soundNames: () => gs.soundManager.names(),
-    onCreate: () => {
-      const w = gs.canvasWidth, h = gs.canvasHeight;
-      gs.rtdManager.createObject({
-        x: w / 2 + (Math.random() - 0.5) * w * 0.4,
-        y: h / 2 + (Math.random() - 0.5) * h * 0.4,
-        bpm: 100, sound: 'kick',
-      });
-    },
+// RTD's right-edge panel depends on the mode: 'objects' shows its own object
+// editor (edit prototypes); 'editor' shows an 'objects' fold for adding prototype
+// instances above the shared juice/sounds/extras folds, over the running game
+// scene; 'game' shows nothing (hidden by CSS). The panel is (re)mounted on every
+// mode change and on activation.
+const RTD_MODES = ['objects', 'game', 'editor'];
+const applyRtdModeClass = (mode) =>
+  RTD_MODES.forEach((m) => document.body.classList.toggle('mode-' + m, m === mode));
+
+// Persist the whole RTD scene (both collections, by instance) to
+// public/scripts/data/rtd.json via the dev server. Shared by the objects-mode
+// editor and the editor-mode objects fold. Returns true on success.
+async function saveRtdScene(gs) {
+  const res = await fetch('/api/config/rtd', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(gs.rtdManager.serialize()),
   });
+  const data = await res.json().catch(() => ({}));
+  return res.ok && data.ok !== false;
+}
+
+// Editor mode's top fold: place and arrange instances of the objects-mode
+// prototypes in the running scene. Prototypes are authored in 'objects' mode;
+// here you drop instances (createFromPrototype targets the active 'game'
+// collection), then click to select, drag to reposition, and delete. Selecting
+// is also where per-object juice settings would hang off once instances carry
+// their own (today they inherit everything but position from their prototype).
+// Sits above the juice/sound/extras folds; re-renders on selection/object change.
+function mountRtdObjectsFold(gs, editorEl) {
+  const rtd = gs.rtdManager;
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  // Save writes the scene to rtd.json via the dev server, so it's only offered on
+  // localhost (matches the objects-mode editor). The header save appears once a
+  // change dirties the scene, and clears on a successful save.
+  const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const fold = new FoldMenu(editorEl, 'objects', { open: true, save: isDev });
+  if (isDev) {
+    fold.onSave = async () => { if (await saveRtdScene(gs)) fold.setDirty(false); };
+    rtd.onSceneDirty = () => fold.setDirty(true);   // add / relocate / rename / delete
+  }
+
+  const render = () => {
+    const protos = rtd.prototypes;
+    const addHtml = protos.length
+      ? `<label>
+           <span class="row" style="display:block; margin-bottom:4px;">add instance from prototype</span>
+           <select data-ctrl="proto">${protos.map((o) => `<option value="${esc(o.name)}">${esc(o.name)}</option>`).join('')}</select>
+         </label>
+         <button data-ctrl="add" class="primary">add object</button>`
+      : `<p class="hint">No prototypes yet. Create them in objects mode.</p>`;
+
+    const sel = rtd.selected;
+    const selHtml = sel
+      ? `<label style="display:block; margin-top:12px;">
+           <span class="row" style="display:block; margin-bottom:4px;">name</span>
+           <input type="text" value="${esc(sel.name ?? '')}" data-ctrl="name">
+         </label>
+         <p class="hint">drag on the canvas to reposition · Delete key removes</p>
+         <button data-ctrl="delete" class="danger">delete object</button>`
+      : `<p class="hint" style="margin-top:12px;">click an object to select · drag to reposition</p>`;
+
+    fold.body.innerHTML = addHtml + selHtml;
+
+    const protoSel = fold.body.querySelector('[data-ctrl="proto"]');
+    const add = fold.body.querySelector('[data-ctrl="add"]');
+    if (add) add.addEventListener('click', () => {
+      if (protoSel && protoSel.value) {
+        const obj = rtd.createFromPrototype(protoSel.value, { x: gs.canvasWidth / 2, y: gs.canvasHeight / 2 });
+        if (obj) rtd.select(obj);   // ships build async (no return) and select on click instead
+      }
+    });
+    const nameInput = fold.body.querySelector('[data-ctrl="name"]');
+    if (nameInput) nameInput.addEventListener('change', (e) => {
+      rtd.renameObject(sel, e.target.value);
+      render();   // reflect any uniquification the manager applied
+    });
+    const del = fold.body.querySelector('[data-ctrl="delete"]');
+    if (del) del.addEventListener('click', () => rtd.deleteSelected());
+  };
+
+  render();
+  // Keep the fold in sync as the selection or the object set changes. Editor mode
+  // cleared these subscriptions before mounting, so the fold owns them here.
+  rtd.onSelectionChange = render;
+  rtd.onObjectsChange = render;
+}
+
+rtdApp.onActivate = (gs) => {
+  const editorEl = document.getElementById('editor');
+
+  const mountObjectsPanel = () => {
+    new RtdEditor(gs.rtdManager, editorEl, {
+      soundNames: () => gs.soundManager.names(),
+      // New objects are copies of the chosen prototype (see RtdManager).
+      onCreate: (prototypeName) => gs.rtdManager.createFromPrototype(prototypeName),
+      // Persist the scene by instance to public/scripts/data/rtd.json (dev server).
+      onSave: () => saveRtdScene(gs),
+    });
+  };
+
+  // 'editor' mounts the shared juice/sounds/extras folds. Persists to its own file
+  // (rtdJuice.json) so it never collides with the object scene in rtd.json.
+  const mountForMode = (mode) => {
+    // Detach the object editor's subscriptions so a stale one can't overwrite
+    // another mode's panel when objects change.
+    gs.rtdManager.onSelectionChange = null;
+    gs.rtdManager.onObjectsChange = null;
+    gs.rtdManager.onSceneDirty = null;
+    if (mode === 'objects') mountObjectsPanel();          // re-subscribes
+    else if (mode === 'editor') mountEditors(gs, 'rtdJuice', {
+      schema: rtdApp.extras.schema,
+      optionSources: { musicTracks: musicTrackOptions },   // enumerated from media/music
+      onApply: (b, p, v) => rtdExtraApply(gs, b, p, v),     // music side effects
+    }, {
+      prepend: (editorEl) => mountRtdObjectsFold(gs, editorEl),
+    });
+    // 'game': panel stays hidden by CSS; leave whatever is mounted.
+  };
+
+  const modes = gs.rtdManager.modes;
+  applyRtdModeClass(modes.current);   // ModeManager doesn't re-apply on re-activation
+  modes.onChange = (name) => { applyRtdModeClass(name); mountForMode(name); };
+  mountForMode(modes.current);
+};
+
+// Clear RTD's mode-* body classes when leaving, so 'mode-editor' can't linger
+// into another app (e.g. primitives, which also styles on mode-editor).
+rtdApp.onDeactivate = () => {
+  RTD_MODES.forEach((m) => document.body.classList.remove('mode-' + m));
 };
 
 let shell;
@@ -303,14 +446,29 @@ shell = new AppShell({
   parent: 'canvas',
   apps: [burst, orbit, primitivesApp, asteroidsApp, rtdApp],
   tabs: '#game-tabs',
-  initial: 'burst',
+  initial: 'rtd',
   // Canvas coords are relative to the stage (below the tab bar), so a click on
   // the tabs reads as y < 0. Each app also drops clicks on its own panels.
   pointerGuard: (x, y, gs) => {
     if (y < 0) return true;
     if (!shell) return false;
     if (shell.activeId === 'primitives') return primPointerGuard(x, y, gs);
+    if (shell.activeId === 'rtd') return rtdPointerGuard(x, y, gs);
     // burst & orbit both show the right-edge editor.
     return x > gs.canvasWidth - PANEL_WIDTH;
   },
 });
+
+// Global mute — lives in the top tab bar, independent of the active app. Toggles
+// Tone's master output (SoundManager.setMuted), so it silences every app at once.
+const muteBtn = document.getElementById('mute-toggle');
+if (muteBtn) {
+  const syncMute = () => {
+    const muted = SoundManager.muted;
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.setAttribute('aria-pressed', String(muted));
+    muteBtn.title = muted ? 'Unmute all sound' : 'Mute all sound';
+  };
+  muteBtn.addEventListener('click', () => { SoundManager.toggleMute(); syncMute(); });
+  syncMute();
+}
