@@ -93,10 +93,7 @@ export default class RtdEditor {
         prototype (template for new objects)
       </label>
 
-      <label class="slider">
-        <span class="row"><span>${o.kind === 'ship' ? 'size' : 'radius'}</span><span class="val" data-val="radius">${o.radius.toFixed(0)}</span></span>
-        <input type="range" min="10" max="200" step="1" value="${o.radius}" data-ctrl="radius">
-      </label>
+      ${this._sizeHtml(o)}
 
       ${this._timingHtml(o)}
 
@@ -129,6 +126,20 @@ export default class RtdEditor {
     `;
     this._wireHeader();
     this._wireControls(o);
+  }
+
+  // A downbeatGun is a free quadrilateral shaped by dragging its corner handles on the
+  // canvas (no size slider); every other kind is sized by radius.
+  _sizeHtml(o) {
+    if (o.kind === 'downbeatGun') {
+      return `<p class="hint">Drag the corner handles on the canvas to shape it — each corner moves on its own.</p>`;
+    }
+    const label = o.kind === 'ship' ? 'size' : 'radius';
+    return `
+      <label class="slider">
+        <span class="row"><span>${label}</span><span class="val" data-val="radius">${o.radius.toFixed(0)}</span></span>
+        <input type="range" min="10" max="200" step="1" value="${o.radius}" data-ctrl="radius">
+      </label>`;
   }
 
   // The metronome is the master clock, so it shows a tempo; every other object shows

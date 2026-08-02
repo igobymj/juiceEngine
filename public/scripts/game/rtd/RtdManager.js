@@ -265,6 +265,12 @@ export default class RtdManager extends Manager {
   // drag on it; releasing ends the drag. No-op during gameplay (see interactive).
   mousePressed(x, y) {
     if (!this.interactive) return;
+    // A selected downbeatGun's corner handle starts reshaping that one vertex — checked
+    // first, since a handle sits on the shape's edge and takes priority over relocating.
+    if (this.selected && this.selected.cornerHandleAt) {
+      const vi = this.selected.cornerHandleAt(x, y);
+      if (vi >= 0) { this.__drag = { obj: this.selected, mode: 'vertex', vi, moved: false }; return; }
+    }
     const coll = this.objects;
     for (let i = coll.length - 1; i >= 0; i--) {
       const o = coll[i];
@@ -278,17 +284,23 @@ export default class RtdManager extends Manager {
     this.select(null);
   }
 
-  // Move the grabbed object with the cursor. Editing an instance's position this
-  // way sets the placement that persists on save (its default position).
+  // Drag the grabbed object: move one corner vertex (a handle) or move the whole object.
+  // A vertex drag reshapes just that corner, so any quadrilateral can be made. Either
+  // persists on save.
   mouseDragged(x, y) {
-    if (!this.__drag) return;
-    this.__drag.obj.x = x + this.__drag.dx;
-    this.__drag.obj.y = y + this.__drag.dy;
-    this.__drag.moved = true;
+    const d = this.__drag;
+    if (!d) return;
+    if (d.mode === 'vertex') {
+      d.obj.verts[d.vi] = { x: x - d.obj.x, y: y - d.obj.y };   // store as an offset from (x,y)
+    } else {
+      d.obj.x = x + d.dx;
+      d.obj.y = y + d.dy;
+    }
+    d.moved = true;
   }
 
   mouseReleased() {
-    if (this.__drag && this.__drag.moved) this._markDirty();   // a relocate persists on save
+    if (this.__drag && this.__drag.moved) this._markDirty();   // a relocate/reshape persists on save
     this.__drag = null;
   }
 

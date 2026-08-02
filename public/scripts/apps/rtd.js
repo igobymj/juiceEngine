@@ -264,6 +264,7 @@ export default {
       rtd.restoreRetainedPrototypes(saved.retainedPrototypes);   // templates of deleted prototypes
       ensureMetronomePrototype(gs, rtd);   // always offered in the editor's prototype dropdown
       ensureDrumKickPrototype(gs, rtd);
+      ensureDownbeatGunPrototype(gs, rtd);
     };
     if (gs.canvasWidth > 0) {
       initScene();
@@ -377,6 +378,24 @@ function ensureDrumKickPrototype(gs, rtd) {
     y: gs.canvasHeight / 2,
     bpm: 100,
     sound: 'kick',
+  });
+}
+
+// Guarantee the downbeatGun prototype exists — a rectangle that pulses on the grid.
+// Color and size (the "size" slider) are tuned in the object editor. Silent by default
+// (sound 'none'); seeded like the others so it's always offered in the create dropdown.
+function ensureDownbeatGunPrototype(gs, rtd) {
+  if (rtd.prototypes.some((o) => o.kind === 'downbeatGun')) return;
+  rtd.createObject({
+    name: 'downbeat gun',
+    kind: 'downbeatGun',
+    isPrototype: true,
+    collection: 'objects',
+    select: false,
+    x: gs.canvasWidth / 2 + 120,
+    y: gs.canvasHeight / 2 + 120,
+    bpm: 100,
+    sound: 'none',
   });
 }
 

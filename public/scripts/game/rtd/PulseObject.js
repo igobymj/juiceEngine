@@ -31,12 +31,12 @@ export default class PulseObject {
     // e.g. per-instance volume in a mix. A map of { key: true }.
     this.overrides = { ...(opts.overrides || {}) };
 
-    // 'circle' (default), 'ship' (imported SVG vector shapes) or 'metronome' (a
-    // circle shown only in the juice editor — see RtdManager). A metronome shares
-    // the ship's defaults, so treat both alike when picking them.
+    // 'circle' (default kick-circle), 'ship' (imported SVG vector shapes), 'metronome'
+    // (a circle shown only in the editor — see RtdManager), 'drumKick' (a circle synth
+    // drum) or 'downbeatGun' (a rectangle). Ship and metronome share the ship defaults.
     this.kind = opts.kind ?? 'circle';
     const shipLike = this.kind === 'ship' || this.kind === 'metronome';
-    this.label = opts.label ?? (this.kind === 'ship' ? 'spaceship' : this.kind === 'metronome' ? 'metronome' : this.kind === 'drumKick' ? 'drum kick' : 'kick-circle');
+    this.label = opts.label ?? (this.kind === 'ship' ? 'spaceship' : this.kind === 'metronome' ? 'metronome' : this.kind === 'drumKick' ? 'drum kick' : this.kind === 'downbeatGun' ? 'downbeat gun' : 'kick-circle');
     this.shapes = opts.shapes ?? null;   // VectorGameObject[] — required for kind 'ship'
     this.svg = opts.svg ?? null;         // source path for a 'ship', so it can be re-imported on load
     this.rotation = opts.rotation ?? 0;  // radians; a transform children inherit
@@ -50,7 +50,14 @@ export default class PulseObject {
     // artwork at its imported size, and it drives the hit test + selection ring.
     // A metronome takes the ship's defaults but uses radius as a plain circle radius.
     this.radius = opts.radius ?? (shipLike ? PulseObject.SHIP_REF_RADIUS : 60);
-    this.color = opts.color ?? (shipLike ? '#cfc7e6' : this.kind === 'drumKick' ? '#e6a15c' : '#8b7bd8');
+    this.color = opts.color ?? (shipLike ? '#cfc7e6' : this.kind === 'drumKick' ? '#e6a15c' : this.kind === 'downbeatGun' ? '#7bd88b' : '#8b7bd8');
+    // A downbeatGun is an arbitrary quadrilateral: four corner vertices as offsets from
+    // the object's (x,y), each independently draggable by its handle. Defaults to a
+    // rectangle (and migrates an older width/height gun to rect verts). Per-object like
+    // position — not inherited; other kinds ignore this.
+    this.verts = (opts.verts && opts.verts.length === 4)
+      ? opts.verts.map((v) => ({ x: v.x, y: v.y }))
+      : PulseObject.rectVerts(opts.width ?? 120, opts.height ?? 60);
     this.bpm = opts.bpm ?? 100;              // pulse tempo
     this.pulseScale = opts.pulseScale ?? 1.6; // scale reached at the moment of a beat
     this.relax = opts.relax ?? 0.16;          // ease-back per frame toward rest (0..1)
@@ -157,6 +164,7 @@ export default class PulseObject {
 
   render() {
     if (this.kind === 'ship') this.renderShip();
+    else if (this.kind === 'downbeatGun') this.renderQuad();
     else this.renderCircle();
     this.renderSelection();
   }
@@ -169,6 +177,36 @@ export default class PulseObject {
     p.fill(this.color);
     p.circle(this.x, this.y, d);
     p.pop();
+  }
+
+  // A filled quadrilateral through the four corner verts (offsets from x,y), pulsing
+  // about (x,y) like the other kinds. Its shape is edited via the corner handles.
+  renderQuad() {
+    const p = this.gameSession.p5;
+    const sc = this.__scale;
+    p.push();
+    p.noStroke();
+    p.fill(this.color);
+    p.beginShape();
+    for (const v of this.verts) p.vertex(this.x + v.x * sc, this.y + v.y * sc);
+    p.endShape(p.CLOSE);
+    p.pop();
+  }
+
+  // The four rest-size (unscaled) corner points of a downbeatGun, in world space.
+  corners() {
+    return this.verts.map((v) => ({ x: this.x + v.x, y: this.y + v.y }));
+  }
+
+  // Index of the corner handle under (x,y) for this (selected) downbeatGun, or -1.
+  cornerHandleAt(x, y) {
+    if (this.kind !== 'downbeatGun' || !this.selected) return -1;
+    const r = PulseObject.HANDLE_HIT;
+    const cs = this.corners();
+    for (let i = 0; i < cs.length; i++) {
+      if (Math.abs(x - cs[i].x) <= r && Math.abs(y - cs[i].y) <= r) return i;
+    }
+    return -1;
   }
 
   // Drive the imported ship shapes as one: they share the ship's position and a
@@ -215,11 +253,31 @@ export default class PulseObject {
   renderSelection() {
     if (!this.selected) return;
     const p = this.gameSession.p5;
+    if (this.kind === 'downbeatGun') { this._renderResizeHandles(p); return; }
     p.push();
     p.noFill();
     p.stroke(255, 255, 255, 180);
     p.strokeWeight(1.5);
     p.circle(this.x, this.y, this.radius * 2 + 14);
+    p.pop();
+  }
+
+  // The quad outline plus a draggable handle at each corner (rest, unscaled size). Each
+  // handle moves just its own vertex, so any quadrilateral can be made (see RtdManager).
+  _renderResizeHandles(p) {
+    const cs = this.corners();
+    p.push();
+    p.noFill();
+    p.stroke(255, 255, 255, 180);
+    p.strokeWeight(1);
+    p.beginShape();
+    for (const c of cs) p.vertex(c.x, c.y);
+    p.endShape(p.CLOSE);
+    p.rectMode(p.CENTER);
+    p.noStroke();
+    p.fill(255);
+    const s = PulseObject.HANDLE_SIZE;
+    for (const c of cs) p.rect(c.x, c.y, s, s);
     p.pop();
   }
 
@@ -246,12 +304,15 @@ export default class PulseObject {
       phaseOffset: this.phaseOffset,
     };
     if (this.kind === 'ship' && this.svg) s.svg = this.svg;
+    if (this.kind === 'downbeatGun') s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
     if (Object.keys(this.overrides).length) s.overrides = { ...this.overrides };
     return s;
   }
 
-  // Hit test in screen space (uses the rest radius so it's easy to click).
+  // Hit test in screen space (rest size). A downbeatGun tests its quad polygon; the
+  // rest are circles by radius.
   contains(x, y) {
+    if (this.kind === 'downbeatGun') return PulseObject.pointInPoly(x, y, this.corners());
     const dx = x - this.x;
     const dy = y - this.y;
     return dx * dx + dy * dy <= this.radius * this.radius;
@@ -260,6 +321,26 @@ export default class PulseObject {
 
 // A ship whose radius equals this renders at its imported (targetSize) size.
 PulseObject.SHIP_REF_RADIUS = 100;
+
+// downbeatGun corner handles: on-screen size, grab tolerance.
+PulseObject.HANDLE_SIZE = 9;
+PulseObject.HANDLE_HIT = 10;
+
+// Rectangle as four corner-vertex offsets (from centre), the default downbeatGun shape.
+PulseObject.rectVerts = (w, h) => {
+  const hw = w / 2, hh = h / 2;
+  return [{ x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }];
+};
+
+// Ray-casting point-in-polygon (works for any quad, incl. concave / self-intersecting).
+PulseObject.pointInPoly = (x, y, pts) => {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+    if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+};
 
 // How far ahead (ms) to pre-schedule beats on the audio clock. Must exceed the frame
 // interval so no beat is missed between frames; larger just queues further ahead.
