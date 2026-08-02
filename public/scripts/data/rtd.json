@@ -1,30 +1,24 @@
 {
   "objects": {
-    "obj-1": {
-      "name": "p_metronome",
+    "obj-11": {
+      "name": "metronome 3",
       "kind": "metronome",
-      "isPrototype": true,
-      "prototypeId": null,
-      "x": 957,
-      "y": 537,
-      "radius": 25,
-      "color": "#cfc7e6",
-      "bpm": 94,
-      "pulseScale": 1.6,
-      "relax": 0.16,
-      "sound": "kick",
-      "volume": -32,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0
+      "isPrototype": false,
+      "prototypeId": "obj-1",
+      "x": 366,
+      "y": 264,
+      "overrides": {
+        "color": true,
+        "bpm": true
+      }
     },
     "obj-2": {
       "name": "p_spaceship",
       "kind": "ship",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 835,
-      "y": 1074,
+      "x": 308,
+      "y": 778,
       "radius": 37,
       "color": "#cfc7e6",
       "bpm": 100,
@@ -36,80 +30,6 @@
       "division": 1,
       "phaseOffset": 0,
       "svg": "media/svg/spaceship.svg"
-    },
-    "obj-7": {
-      "name": "p_drum kick 2",
-      "kind": "drumKick",
-      "isPrototype": true,
-      "prototypeId": null,
-      "x": 758,
-      "y": 576,
-      "radius": 60,
-      "color": "#e6a15c",
-      "bpm": 100,
-      "pulseScale": 1.6,
-      "relax": 0.16,
-      "sound": "kick",
-      "volume": -6,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0
-    },
-    "obj-10": {
-      "name": "drum kick",
-      "kind": "drumKick",
-      "isPrototype": false,
-      "prototypeId": null,
-      "x": 758,
-      "y": 576,
-      "radius": 60,
-      "color": "#e6a15c",
-      "bpm": 100,
-      "pulseScale": 1.6,
-      "relax": 0.16,
-      "sound": "kick",
-      "volume": -6,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0
-    },
-    "obj-11": {
-      "name": "metronome 3",
-      "kind": "metronome",
-      "isPrototype": false,
-      "prototypeId": "obj-1",
-      "x": 366,
-      "y": 264,
-      "overrides": {
-        "color": true
-      }
-    }
-  },
-  "game": {
-    "obj-4": {
-      "name": "metronome 2",
-      "kind": "metronome",
-      "isPrototype": false,
-      "prototypeId": "obj-1",
-      "x": 72,
-      "y": 90.60000000000002
-    },
-    "obj-3": {
-      "name": "spaceship 2",
-      "kind": "ship",
-      "isPrototype": false,
-      "prototypeId": "obj-2",
-      "x": 634,
-      "y": 754,
-      "svg": "media/svg/spaceship.svg"
-    },
-    "obj-8": {
-      "name": "metronome",
-      "kind": "metronome",
-      "isPrototype": false,
-      "prototypeId": "obj-1",
-      "x": 837,
-      "y": 537
     }
   },
   "retainedPrototypes": [
@@ -120,6 +40,42 @@
       "prototypeId": null,
       "x": 718,
       "y": 536,
+      "radius": 60,
+      "color": "#e6a15c",
+      "bpm": 100,
+      "pulseScale": 1.6,
+      "relax": 0.16,
+      "sound": "kick",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0
+    },
+    {
+      "name": "p_metronome",
+      "kind": "metronome",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 958,
+      "y": 536,
+      "radius": 25,
+      "color": "#cfc7e6",
+      "bpm": 94,
+      "pulseScale": 1.6,
+      "relax": 0.16,
+      "sound": "kick",
+      "volume": -32,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0
+    },
+    {
+      "name": "p_drum kick 2",
+      "kind": "drumKick",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 758,
+      "y": 576,
       "radius": 60,
       "color": "#e6a15c",
       "bpm": 100,
