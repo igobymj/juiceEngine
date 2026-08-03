@@ -78,6 +78,7 @@ export default class PulseObject {
     // --- runtime state ---
     this.__scale = 1;
     this.selected = false;
+    this.__attachedShip = null;   // set when a downbeatGun is collected by the ship (game mode); it then rides on the ship
     // Beat clocks start locked to the grid so the first pulse lands on the next grid
     // beat, not an off-grid one at creation/load. __lastVisualBeat drives the (frame-
     // accurate) visual pulse; __scheduledThrough is how far ahead the audio has been
@@ -184,11 +185,19 @@ export default class PulseObject {
   renderQuad() {
     const p = this.gameSession.p5;
     const sc = this.__scale;
+    // Once collected, the gun rides on the ship's front-left quarter (rotating with it)
+    // instead of sitting at its own position.
+    let bx = this.x, by = this.y, rot = 0;
+    if (this.__attachedShip) { const a = PulseObject.attachPoint(this.__attachedShip); bx = a.x; by = a.y; rot = this.__attachedShip.rotation; }
+    const c = Math.cos(rot), s = Math.sin(rot);
     p.push();
     p.noStroke();
     p.fill(this.color);
     p.beginShape();
-    for (const v of this.verts) p.vertex(this.x + v.x * sc, this.y + v.y * sc);
+    for (const v of this.verts) {
+      const vx = v.x * sc, vy = v.y * sc;
+      p.vertex(bx + vx * c - vy * s, by + vx * s + vy * c);
+    }
     p.endShape(p.CLOSE);
     p.pop();
   }
@@ -196,6 +205,19 @@ export default class PulseObject {
   // The four rest-size (unscaled) corner points of a downbeatGun, in world space.
   corners() {
     return this.verts.map((v) => ({ x: this.x + v.x, y: this.y + v.y }));
+  }
+
+  // Move the origin (x,y) to the centroid of the verts, shifting the verts to
+  // compensate so the shape doesn't move on screen. After reshaping, the origin can
+  // drift far from the middle; re-centring makes the quad attach/pulse about its centre.
+  recenterVerts() {
+    const n = this.verts.length;
+    if (!n) return;
+    let cx = 0, cy = 0;
+    for (const v of this.verts) { cx += v.x; cy += v.y; }
+    cx /= n; cy /= n;
+    this.x += cx; this.y += cy;
+    for (const v of this.verts) { v.x -= cx; v.y -= cy; }
   }
 
   // Index of the corner handle under (x,y) for this (selected) downbeatGun, or -1.
@@ -325,6 +347,17 @@ PulseObject.SHIP_REF_RADIUS = 100;
 // downbeatGun corner handles: on-screen size, grab tolerance.
 PulseObject.HANDLE_SIZE = 9;
 PulseObject.HANDLE_HIT = 10;
+
+// World point a collected downbeatGun rides on: the ship's front-left quarter (front =
+// the nose direction = ship-local -Y, left = -X), rotated into world space.
+PulseObject.ATTACH_QUARTER = 0.5;
+PulseObject.ATTACH_NUDGE_X = 4;   // extra px further left of the front-left quarter
+PulseObject.attachPoint = (ship) => {
+  const off = ship.radius * PulseObject.ATTACH_QUARTER;
+  const c = Math.cos(ship.rotation), s = Math.sin(ship.rotation);
+  const lx = -off - PulseObject.ATTACH_NUDGE_X, ly = -off;   // front-left, nudged left
+  return { x: ship.x + lx * c - ly * s, y: ship.y + lx * s + ly * c };
+};
 
 // Rectangle as four corner-vertex offsets (from centre), the default downbeatGun shape.
 PulseObject.rectVerts = (w, h) => {

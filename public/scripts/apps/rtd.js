@@ -348,7 +348,7 @@ function ensureGameShip(gs, rtd) {
 // appears in the editor's prototype dropdown. Lives in the 'objects' collection
 // alongside the other prototypes; its instances only render in editor mode.
 function ensureMetronomePrototype(gs, rtd) {
-  if (rtd.prototypes.some((o) => o.kind === 'metronome')) return;
+  if (rtd.prototypes.some((o) => o.kind === 'metronome') || rtd.hasRetainedKind('metronome')) return;
   rtd.createObject({
     name: 'metronome',
     kind: 'metronome',
@@ -367,7 +367,7 @@ function ensureMetronomePrototype(gs, rtd) {
 // metronome so it's always offered in the editor's prototype dropdown, including for
 // scenes saved before drumKick existed.
 function ensureDrumKickPrototype(gs, rtd) {
-  if (rtd.prototypes.some((o) => o.kind === 'drumKick')) return;
+  if (rtd.prototypes.some((o) => o.kind === 'drumKick') || rtd.hasRetainedKind('drumKick')) return;
   rtd.createObject({
     name: 'drum kick',
     kind: 'drumKick',
@@ -385,7 +385,7 @@ function ensureDrumKickPrototype(gs, rtd) {
 // Color and size (the "size" slider) are tuned in the object editor. Silent by default
 // (sound 'none'); seeded like the others so it's always offered in the create dropdown.
 function ensureDownbeatGunPrototype(gs, rtd) {
-  if (rtd.prototypes.some((o) => o.kind === 'downbeatGun')) return;
+  if (rtd.prototypes.some((o) => o.kind === 'downbeatGun') || rtd.hasRetainedKind('downbeatGun')) return;
   rtd.createObject({
     name: 'downbeat gun',
     kind: 'downbeatGun',

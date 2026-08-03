@@ -132,7 +132,9 @@ export default class RtdEditor {
   // canvas (no size slider); every other kind is sized by radius.
   _sizeHtml(o) {
     if (o.kind === 'downbeatGun') {
-      return `<p class="hint">Drag the corner handles on the canvas to shape it — each corner moves on its own.</p>`;
+      return `
+        <p class="hint">Drag the corner handles on the canvas to shape it — each corner moves on its own.</p>
+        <button data-ctrl="recenter">recenter origin</button>`;
     }
     const label = o.kind === 'ship' ? 'size' : 'radius';
     return `
@@ -236,6 +238,9 @@ export default class RtdEditor {
 
     const muteEl = $('[data-ctrl="muted"]');
     if (muteEl) muteEl.addEventListener('change', (e) => { o.muted = e.target.checked; override('muted'); });
+
+    const recenter = $('[data-ctrl="recenter"]');
+    if (recenter) recenter.addEventListener('click', () => { o.recenterVerts(); });
 
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
     $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; override('sound'); });

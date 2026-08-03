@@ -1,15 +1,60 @@
 {
   "objects": {
-    "obj-11": {
-      "name": "metronome 3",
+    "obj-15": {
+      "name": "downbeat gun left",
+      "kind": "downbeatGun",
+      "isPrototype": false,
+      "prototypeId": "obj-14",
+      "x": 285,
+      "y": 758.25,
+      "verts": [
+        {
+          "x": 13,
+          "y": -16.25
+        },
+        {
+          "x": 5,
+          "y": 16.75
+        },
+        {
+          "x": -13,
+          "y": 9.75
+        },
+        {
+          "x": -5,
+          "y": -10.25
+        }
+      ],
+      "overrides": {
+        "pulseScale": true,
+        "sound": true,
+        "volume": true,
+        "phaseOffset": true
+      }
+    },
+    "obj-17": {
+      "name": "metronome",
       "kind": "metronome",
       "isPrototype": false,
-      "prototypeId": "obj-1",
-      "x": 366,
-      "y": 264,
+      "prototypeId": null,
+      "x": 613,
+      "y": 344.5,
+      "radius": 38,
+      "color": "#cfc7e6",
+      "bpm": 60,
+      "pulseScale": 1.35,
+      "relax": 0.16,
+      "sound": "snare",
+      "volume": -18,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
       "overrides": {
-        "color": true,
-        "bpm": true
+        "radius": true,
+        "bpm": true,
+        "pulseScale": true,
+        "sound": true,
+        "volume": true
       }
     },
     "obj-2": {
@@ -17,8 +62,8 @@
       "kind": "ship",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 308,
-      "y": 778,
+      "x": 501,
+      "y": 782,
       "radius": 37,
       "color": "#cfc7e6",
       "bpm": 100,
@@ -33,42 +78,6 @@
     }
   },
   "retainedPrototypes": [
-    {
-      "name": "p_drum kick",
-      "kind": "drumKick",
-      "isPrototype": true,
-      "prototypeId": null,
-      "x": 718,
-      "y": 536,
-      "radius": 60,
-      "color": "#e6a15c",
-      "bpm": 100,
-      "pulseScale": 1.6,
-      "relax": 0.16,
-      "sound": "kick",
-      "volume": -6,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0
-    },
-    {
-      "name": "p_metronome",
-      "kind": "metronome",
-      "isPrototype": true,
-      "prototypeId": null,
-      "x": 958,
-      "y": 536,
-      "radius": 25,
-      "color": "#cfc7e6",
-      "bpm": 94,
-      "pulseScale": 1.6,
-      "relax": 0.16,
-      "sound": "kick",
-      "volume": -32,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0
-    },
     {
       "name": "p_drum kick 2",
       "kind": "drumKick",
@@ -86,6 +95,78 @@
       "muted": false,
       "division": 1,
       "phaseOffset": 0
+    },
+    {
+      "name": "p_drum kick",
+      "kind": "drumKick",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 826,
+      "y": 518.5,
+      "radius": 60,
+      "color": "#e6a15c",
+      "bpm": 100,
+      "pulseScale": 1.6,
+      "relax": 0.16,
+      "sound": "kick",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0
+    },
+    {
+      "name": "p_metronome",
+      "kind": "metronome",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 1066,
+      "y": 518.5,
+      "radius": 100,
+      "color": "#cfc7e6",
+      "bpm": 100,
+      "pulseScale": 1.6,
+      "relax": 0.16,
+      "sound": "kick",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0
+    },
+    {
+      "name": "p_downbeat gun",
+      "kind": "downbeatGun",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 1066,
+      "y": 638.5,
+      "radius": 60,
+      "color": "#7bd88b",
+      "bpm": 100,
+      "pulseScale": 1.6,
+      "relax": 0.16,
+      "sound": "none",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "verts": [
+        {
+          "x": -60,
+          "y": -30
+        },
+        {
+          "x": 60,
+          "y": -30
+        },
+        {
+          "x": 60,
+          "y": 30
+        },
+        {
+          "x": -60,
+          "y": 30
+        }
+      ]
     }
   ]
 }

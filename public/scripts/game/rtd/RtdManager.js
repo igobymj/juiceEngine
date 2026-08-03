@@ -61,6 +61,12 @@ export default class RtdManager extends Manager {
     this.__retainedPrototypes = Array.isArray(list) ? list.slice() : [];
   }
 
+  // Whether a prototype of this kind was deleted (kept as a retained template). The
+  // seeders use it so a deleted default prototype isn't re-created on load.
+  hasRetainedKind(kind) {
+    return this.__retainedPrototypes.some((r) => r.kind === kind);
+  }
+
   // Create a pulse object in the authored scene.
   createObject(opts = {}) {
     const obj = new PulseObject(this.gameSession, opts);
@@ -138,8 +144,35 @@ export default class RtdManager extends Manager {
   setMode(mode) {
     if (mode === this.mode) return;
     this.select(null);
+    this._clearGunAttachments();   // collection is game-runtime only; reset on any mode change
     this.mode = mode;
     this.ship = this._findShip();
+  }
+
+  // In game mode, a downbeatGun the ship overlaps is collected — it attaches to the
+  // ship and rides on its front-left quarter (rendered there, see PulseObject).
+  _collectGuns() {
+    const ship = this.ship;
+    if (!ship || ship.kind !== 'ship') return;
+    for (const o of this.__objects) {
+      if (o.kind !== 'downbeatGun' || o.__attachedShip) continue;
+      if (this._shipTouchesGun(ship, o)) o.__attachedShip = ship;
+    }
+  }
+
+  // Forgiving overlap so flying over any part of the visible gun collects it: the ship
+  // (a circle of ~radius at its centre) reaches the gun when its centre is inside the
+  // gun's quad, or the gun's origin or a corner is within the ship's radius. Origin
+  // distance alone misses a reshaped gun whose body sits away from its origin point.
+  _shipTouchesGun(ship, gun) {
+    const r = ship.radius;
+    if (gun.contains(ship.x, ship.y)) return true;
+    if (Math.hypot(gun.x - ship.x, gun.y - ship.y) < r) return true;
+    return gun.corners().some((c) => Math.hypot(c.x - ship.x, c.y - ship.y) < r);
+  }
+
+  _clearGunAttachments() {
+    for (const o of this.__objects) if (o.__attachedShip) o.__attachedShip = null;
   }
 
   // Set an object's name, keeping it unique among all objects (both collections).
@@ -215,13 +248,20 @@ export default class RtdManager extends Manager {
     };
   }
 
-  // Prototypes (and standalone objects) persist in full. A linked instance saves
-  // only its reference — identity, placement and link — and drops the inherited
-  // props, which reconstitute from its prototype on load. Nothing to go stale.
+  // Prototypes and standalone objects persist in full. A linked instance drops the
+  // inherited props that reconstitute from its prototype on load — but ONLY those a
+  // LIVE prototype can restore and that the instance doesn't override. An orphaned
+  // instance (prototype deleted) or an overridden prop keeps its own value, else the
+  // edit is lost on save.
   _record(o) {
     const rec = o.serialize();
-    if (o.prototypeId && !o.isPrototype) {
-      for (const k of RtdManager.INHERITED) delete rec[k];
+    const liveProto = o.prototypeId && !o.isPrototype
+      && this.__objects.some((p) => p.isPrototype && p.id === o.prototypeId);
+    if (liveProto) {
+      for (const k of RtdManager.INHERITED) {
+        if (o.overrides && o.overrides[k]) continue;   // keep per-instance overrides
+        delete rec[k];
+      }
     }
     return rec;
   }
@@ -317,6 +357,7 @@ export default class RtdManager extends Manager {
     this._publishGrid();                  // master metronome sets the shared tempo first
     this.moveShip();
     this.syncInstancesFromPrototypes();   // instances honor their prototype each frame
+    if (this.mode === 'game') this._collectGuns();   // ship picks up downbeat guns it touches
     for (const o of this.objects) { if (this._hiddenInGame(o)) continue; o.update(); }
   }
 
@@ -356,6 +397,23 @@ export default class RtdManager extends Manager {
 
   render() {
     for (const o of this.objects) { if (this._hiddenInGame(o)) continue; o.render(); }
+    this._renderBpmReadout();
+  }
+
+  // Persistent debug readout (upper-left, clear of the tab bars): the live master
+  // tempo in bpm, from the beat grid (the metronome's bpm, or the default tempo when
+  // there's no metronome).
+  _renderBpmReadout() {
+    const p = this.gameSession.p5;
+    const interval = this.beatGrid && this.beatGrid.masterInterval;
+    const bpm = interval ? 60000 / interval : 0;
+    p.push();
+    p.noStroke();
+    p.fill(207, 199, 230);
+    p.textAlign(p.LEFT, p.TOP);
+    p.textSize(13);
+    p.text('metronome: ' + bpm.toFixed(0) + ' bpm', 14, 92);
+    p.pop();
   }
 }
 
