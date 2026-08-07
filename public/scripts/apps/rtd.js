@@ -200,6 +200,7 @@ export default {
     const projectiles = new ProjectileManager(gs, { event: 'bulletFire' });
     gs.gameLoop.addUpdateSystem('rtd-bullets', projectiles, 40);
     gs.gameLoop.addRenderSystem('rtd-bullets', projectiles, 40);
+    gs.registerManager('rtdProjectiles', projectiles);   // so object behaviours can fire (behaviors.js)
 
     // Perf overlay (toggle with the ` backtick key): FPS, frame time, live counts.
     // Not registered with any mode, so it's always available and near-free when hidden.
@@ -210,6 +211,11 @@ export default {
     }));
     gs.gameLoop.addRenderSystem('rtd-perf', perf, 999);
     gs.inputManager.addKeyHandler((key, code) => { if (code === 'Backquote') perf.toggle(); });
+
+    // In-game phase-align slider (DOM overlay, bottom-centre): nudge the grid phase
+    // (master metronome's phaseOffset) to lock the pulse to the music mid-play. Shown
+    // only in game mode (CSS, via the body.mode-game class); mirrors the editor control.
+    gs.gameLoop.addRenderSystem('rtd-phase-ui', makePhaseSlider(gs, rtd), 998);
 
     // Three modes (like primitives): 'objects' edits/selects via the object editor;
     // 'game' is the play scene (starfield, ship, asteroids, bullets); 'editor' is
@@ -340,6 +346,28 @@ function ensureGameShip(gs, rtd) {
   if (!proto) return;   // ship prototype not imported yet — retry on the next game entry
   rtd.__gameShipReady = true;
   rtd.createFromPrototype(proto.name, { x: gs.canvasWidth / 2, y: gs.canvasHeight * 0.62 });
+}
+
+// The in-game phase-align slider — a DOM range that drives the grid phase (the master
+// metronome's phaseOffset, -0.5..0.5). Visibility is CSS-driven (body.mode-game); the
+// render tick keeps it showing the live phase except while the user is dragging it.
+function makePhaseSlider(gs, rtd) {
+  const wrap = document.createElement('div');
+  wrap.id = 'rtd-phase-align';
+  const label = document.createElement('span');
+  label.textContent = 'phase align';
+  const range = document.createElement('input');
+  range.type = 'range'; range.min = '-0.5'; range.max = '0.5'; range.step = '0.01'; range.value = '0';
+  wrap.append(label, range);
+  document.body.appendChild(wrap);
+  range.addEventListener('input', () => rtd.setGridPhase(parseFloat(range.value)));
+  return {
+    render() {
+      if (rtd.mode !== 'game' || document.activeElement === range) return;
+      const v = rtd.gridPhase();
+      if (parseFloat(range.value) !== v) range.value = String(v);
+    },
+  };
 }
 
 // Guarantee the metronome prototype exists — a juice-editor beat reference you

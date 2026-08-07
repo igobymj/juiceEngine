@@ -377,6 +377,21 @@ export default class RtdManager extends Manager {
     return this.__objects.find((o) => o.kind === 'metronome') || null;
   }
 
+  // Live grid phase = the master metronome's phaseOffset (a fraction of a beat, -0.5..0.5).
+  gridPhase() {
+    const m = this._findMaster();
+    return m ? (m.phaseOffset || 0) : 0;
+  }
+
+  // Nudge the grid phase (the editor's phase-align slider and the in-game slider both
+  // use this). Marks it as a per-instance override so a synced metronome instance keeps it.
+  setGridPhase(v) {
+    const m = this._findMaster();
+    if (!m) return;
+    m.phaseOffset = v;
+    if (!m.isPrototype) (m.overrides || (m.overrides = {})).phaseOffset = true;
+  }
+
   // Drive the ship with WASD / arrow keys — except the up arrow, which is bound to
   // fire (see rtd.js), so only W raises the ship (down/left/right arrows still move).
   // Read directly here rather than via inputObject.movement so the base movement
@@ -423,4 +438,4 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 
 // Properties an instance inherits from its prototype (the editor-editable ones).
 // Identity/placement (name, position, isPrototype) stay per-instance.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'volume', 'muted', 'division', 'phaseOffset'];
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset'];

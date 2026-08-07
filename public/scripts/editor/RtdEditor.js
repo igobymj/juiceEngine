@@ -12,6 +12,8 @@
  * `options.soundNames()` supplies the sound dropdown choices.
  */
 
+import { behaviorOptions } from "../game/rtd/behaviors.js";
+
 export default class RtdEditor {
   constructor(rtdManager, panelEl, options = {}) {
     this.manager = rtdManager;
@@ -78,6 +80,11 @@ export default class RtdEditor {
       + this.soundNames()
         .map((n) => `<option value="${n}" ${n === o.sound ? 'selected' : ''}>${n}</option>`)
         .join('');
+    // Behaviours (fire-on-downbeat, …) attach from a library, like sounds.
+    const curBehavior = o.behavior || 'none';
+    const behaviorOpts = behaviorOptions()
+      .map((b) => `<option value="${b.value}" ${b.value === curBehavior ? 'selected' : ''}>${this._esc(b.label)}</option>`)
+      .join('');
     this.panelEl.innerHTML = `
       ${this._headerHtml()}
 
@@ -120,6 +127,11 @@ export default class RtdEditor {
       <label>
         <span class="row" style="display:block; margin-bottom:4px;">sound</span>
         <select data-ctrl="sound">${soundOpts}</select>
+      </label>
+
+      <label>
+        <span class="row" style="display:block; margin-bottom:4px;">behavior</span>
+        <select data-ctrl="behavior">${behaviorOpts}</select>
       </label>
 
       <button data-ctrl="delete" class="danger">delete object</button>
@@ -244,6 +256,7 @@ export default class RtdEditor {
 
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
     $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; override('sound'); });
+    $('[data-ctrl="behavior"]').addEventListener('change', (e) => { o.behavior = e.target.value; override('behavior'); });
     $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
 
     // Name is kept unique by the manager; re-render so the field reflects any

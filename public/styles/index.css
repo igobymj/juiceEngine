@@ -66,6 +66,18 @@ html, body {
   background: var(--stage);
 }
 #canvas { position: absolute; inset: 0; }
+
+/* In-game phase-align slider — shown only while RTD is in game mode. */
+#rtd-phase-align {
+  display: none;
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+  z-index: 9000; align-items: center; gap: 10px;
+  padding: 8px 14px; border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6); color: #cfc7e6;
+  font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+body.mode-game #rtd-phase-align { display: flex; }
+#rtd-phase-align input[type="range"] { width: 240px; }
 /* Promote the p5 canvas to its own GPU compositor layer. Can smooth present-time
    judder on a large animated canvas (the cost the JS-side FPS can't see). */
 #canvas canvas { transform: translateZ(0); will-change: transform; }

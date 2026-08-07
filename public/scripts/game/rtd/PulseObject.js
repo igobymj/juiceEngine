@@ -15,6 +15,8 @@
  * unscaled realTimeSinceStartup clock so the beat stays steady.
  */
 
+import { runBehaviorOnBeat } from "./behaviors.js";
+
 export default class PulseObject {
   constructor(gameSession, opts = {}) {
     this.gameSession = gameSession;
@@ -62,6 +64,7 @@ export default class PulseObject {
     this.pulseScale = opts.pulseScale ?? 1.6; // scale reached at the moment of a beat
     this.relax = opts.relax ?? 0.16;          // ease-back per frame toward rest (0..1)
     this.sound = opts.sound ?? 'kick';        // registered sound name to play on beat
+    this.behavior = opts.behavior ?? 'none';  // attached behaviour name (see behaviors.js)
     this.volume = opts.volume ?? -6;          // per-object playback level (dB)
     this.muted = opts.muted ?? false;         // when true, pulses visually but plays no sound
     // Subdivision: how many times this object fires per master beat. 1 = on each
@@ -132,6 +135,7 @@ export default class PulseObject {
     if (beat > this.__lastVisualBeat) {
       this.__lastVisualBeat = beat;
       this.__scale = this.pulseScale;
+      if (this.behavior && this.behavior !== 'none') runBehaviorOnBeat(this);
     }
     // Ease the scale back toward its rest size of 1.
     this.__scale += (1 - this.__scale) * this.relax;
@@ -320,6 +324,7 @@ export default class PulseObject {
       pulseScale: this.pulseScale,
       relax: this.relax,
       sound: this.sound,
+      behavior: this.behavior,
       volume: this.volume,
       muted: this.muted,
       division: this.division,
@@ -329,6 +334,14 @@ export default class PulseObject {
     if (this.kind === 'downbeatGun') s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
     if (Object.keys(this.overrides).length) s.overrides = { ...this.overrides };
     return s;
+  }
+
+  // Where the object currently lives in the world: the ship's attach point when it's a
+  // collected downbeatGun riding the ship, otherwise its own origin. Used by behaviours
+  // (e.g. fire-on-downbeat) so a collected gun fires from the ship, not its home spot.
+  worldOrigin() {
+    if (this.__attachedShip) return PulseObject.attachPoint(this.__attachedShip);
+    return { x: this.x, y: this.y };
   }
 
   // Hit test in screen space (rest size). A downbeatGun tests its quad polygon; the

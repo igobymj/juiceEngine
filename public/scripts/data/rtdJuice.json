@@ -18,7 +18,7 @@
       "particleHue": 0
     },
     "music": {
-      "track": "none",
+      "track": "media/music/100bpm_Echoes_In_Neon_Dreams.mp3",
       "volume": -11,
       "play": true
     },
