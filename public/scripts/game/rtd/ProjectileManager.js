@@ -10,6 +10,7 @@
  */
 
 import Bullet from "./Bullet.js";
+import Shell from "./Shell.js";
 
 const AMMO_LIMIT = 6;
 
@@ -24,15 +25,23 @@ export default class ProjectileManager {
   get bullets() { return this.__bullets; }
 
   // Spawn a bullet at `position` (p5.Vector) travelling along `angle` (radians).
-  fire(position, angle) {
+  // Pass { event: false } to skip the fire juice event (e.g. a downbeat gun that carries
+  // its own selected sound and shouldn't also trigger the generic bullet-fire sound).
+  fire(position, angle, opts = {}) {
     if (this.__bullets.length >= this.ammoLimit) return;
     this.__bullets.push(new Bullet(this.gs, position, angle));
-    if (this.event) {
+    if (this.event && opts.event !== false) {
       this.gs.juiceEventManager.addNew(this.event, {
         position: this.gs.p5.createVector(position.x, position.y),
         velocity: this.gs.p5.createVector(0, 0),
       });
     }
+  }
+
+  // Spawn a slow, large AOE shell (the four-measure gun). opts: { speed, aoe, color }.
+  // Shares the projectile list/update/render; not ammo-limited since it fires rarely.
+  fireShell(position, angle, opts = {}) {
+    this.__bullets.push(new Shell(this.gs, position, angle, opts));
   }
 
   update() {

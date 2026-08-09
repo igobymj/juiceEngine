@@ -87,6 +87,22 @@ export default class AsteroidManager extends Manager {
     if (this.event) this.gameSession.juiceEventManager.addNew(this.event, asteroid);
   }
 
+  // Area-of-effect blast (a Shell detonation): destroy every asteroid whose body falls
+  // within `radius` of `center`, exploding and splitting each like a direct hit.
+  explodeArea(center, radius) {
+    let hit = false;
+    const p5 = this.gameSession.p5;
+    for (let i = this.__asteroids.length - 1; i >= 0; i--) {
+      const a = this.__asteroids[i];
+      if (p5.dist(center.x, center.y, a.position.x, a.position.y) > radius + a.diagonal / 2) continue;
+      this.explode(a);
+      if (a.nextType !== "none") this.spawnAsteroid(2, a.nextType, a.position.x, a.position.y);
+      this.__asteroids.splice(i, 1);
+      hit = true;
+    }
+    return hit;
+  }
+
   render() {
     for (const a of this.__asteroids) a.render();
   }

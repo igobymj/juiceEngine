@@ -5,34 +5,36 @@
       "kind": "downbeatGun",
       "isPrototype": false,
       "prototypeId": "obj-14",
-      "x": 285,
-      "y": 758.25,
+      "x": 474.25,
+      "y": 623.25,
       "radius": 60,
       "color": "#7bd88b",
       "bpm": 100,
       "pulseScale": 1.6,
       "relax": 0.16,
       "sound": "kick",
+      "behavior": "none",
       "volume": -40,
       "muted": false,
       "division": 1,
       "phaseOffset": 0,
+      "timeSignature": "4/4",
       "verts": [
         {
-          "x": 13,
-          "y": -16.25
+          "x": 9.75,
+          "y": 3.75
         },
         {
-          "x": 5,
-          "y": 16.75
+          "x": -4.25,
+          "y": 7.75
         },
         {
-          "x": -13,
-          "y": 9.75
+          "x": -12.25,
+          "y": 1.75
         },
         {
-          "x": -5,
-          "y": -10.25
+          "x": 6.75,
+          "y": -13.25
         }
       ],
       "overrides": {
@@ -55,10 +57,12 @@
       "pulseScale": 1.35,
       "relax": 0.16,
       "sound": "snare",
+      "behavior": "none",
       "volume": -19,
       "muted": false,
       "division": 1,
       "phaseOffset": 0,
+      "timeSignature": "4/4",
       "overrides": {
         "radius": true,
         "bpm": true,
@@ -67,23 +71,65 @@
         "volume": true
       }
     },
+    "obj-18": {
+      "name": "p_four measure gun",
+      "kind": "fourMeasureGun",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 501.25,
+      "y": 574.25,
+      "radius": 60,
+      "color": "#e0567b",
+      "bpm": 100,
+      "pulseScale": 1.2,
+      "relax": 0.16,
+      "sound": "none",
+      "behavior": "none",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "timeSignature": "4/4",
+      "verts": [
+        {
+          "x": -6.25,
+          "y": -13.25
+        },
+        {
+          "x": 5.75,
+          "y": -13.25
+        },
+        {
+          "x": 14.75,
+          "y": 12.75
+        },
+        {
+          "x": -13.25,
+          "y": 12.75
+        }
+      ],
+      "projectileSpeed": 0.3,
+      "aoeRadius": 90
+    },
     "obj-2": {
       "name": "p_spaceship",
       "kind": "ship",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 501,
-      "y": 782,
+      "x": 637,
+      "y": 675,
       "radius": 37,
       "color": "#cfc7e6",
       "bpm": 100,
       "pulseScale": 1.05,
       "relax": 0.16,
       "sound": "none",
+      "behavior": "none",
       "volume": -19,
       "muted": false,
       "division": 1,
       "phaseOffset": 0,
+      "timeSignature": "4/4",
       "svg": "media/svg/spaceship.svg"
     }
   },

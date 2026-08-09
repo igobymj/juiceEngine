@@ -58,6 +58,12 @@ export default class SampleSoundObject extends SoundObject {
 		}
 	}
 
+	// Track length in seconds (0 until the buffer has loaded). Lets a caller schedule
+	// against the end of the clip — e.g. a manual, downbeat-aligned music loop.
+	get duration() {
+		return (this.__loaded && this.__player.buffer) ? this.__player.buffer.duration : 0;
+	}
+
 	dispose() {
 		this.__player.stop();
 		this.__player.dispose();

@@ -15,7 +15,7 @@
  * unscaled realTimeSinceStartup clock so the beat stays steady.
  */
 
-import { runBehaviorOnBeat } from "./behaviors.js";
+import { runBehaviorOnBeat, runBehaviorOnDownbeat, fireOnDownbeat, fireAoeShell } from "./behaviors.js";
 
 export default class PulseObject {
   constructor(gameSession, opts = {}) {
@@ -38,7 +38,7 @@ export default class PulseObject {
     // drum) or 'downbeatGun' (a rectangle). Ship and metronome share the ship defaults.
     this.kind = opts.kind ?? 'circle';
     const shipLike = this.kind === 'ship' || this.kind === 'metronome';
-    this.label = opts.label ?? (this.kind === 'ship' ? 'spaceship' : this.kind === 'metronome' ? 'metronome' : this.kind === 'drumKick' ? 'drum kick' : this.kind === 'downbeatGun' ? 'downbeat gun' : 'kick-circle');
+    this.label = opts.label ?? (this.kind === 'ship' ? 'spaceship' : this.kind === 'metronome' ? 'metronome' : this.kind === 'drumKick' ? 'drum kick' : this.kind === 'downbeatGun' ? 'downbeat gun' : this.kind === 'fourMeasureGun' ? 'four measure gun' : 'kick-circle');
     this.shapes = opts.shapes ?? null;   // VectorGameObject[] — required for kind 'ship'
     this.svg = opts.svg ?? null;         // source path for a 'ship', so it can be re-imported on load
     this.rotation = opts.rotation ?? 0;  // radians; a transform children inherit
@@ -52,7 +52,7 @@ export default class PulseObject {
     // artwork at its imported size, and it drives the hit test + selection ring.
     // A metronome takes the ship's defaults but uses radius as a plain circle radius.
     this.radius = opts.radius ?? (shipLike ? PulseObject.SHIP_REF_RADIUS : 60);
-    this.color = opts.color ?? (shipLike ? '#cfc7e6' : this.kind === 'drumKick' ? '#e6a15c' : this.kind === 'downbeatGun' ? '#7bd88b' : '#8b7bd8');
+    this.color = opts.color ?? (shipLike ? '#cfc7e6' : this.kind === 'drumKick' ? '#e6a15c' : this.kind === 'downbeatGun' ? '#7bd88b' : this.kind === 'fourMeasureGun' ? '#e0567b' : '#8b7bd8');
     // A downbeatGun is an arbitrary quadrilateral: four corner vertices as offsets from
     // the object's (x,y), each independently draggable by its handle. Defaults to a
     // rectangle (and migrates an older width/height gun to rect verts). Per-object like
@@ -65,6 +65,10 @@ export default class PulseObject {
     this.relax = opts.relax ?? 0.16;          // ease-back per frame toward rest (0..1)
     this.sound = opts.sound ?? 'kick';        // registered sound name to play on beat
     this.behavior = opts.behavior ?? 'none';  // attached behaviour name (see behaviors.js)
+    // Four-measure-gun shell params (ignored by other kinds): shot speed (px/ms, slow)
+    // and the blast area-of-effect radius (px). Both tuned in the object editor.
+    this.projectileSpeed = opts.projectileSpeed ?? 0.3;
+    this.aoeRadius = opts.aoeRadius ?? 90;
     this.volume = opts.volume ?? -6;          // per-object playback level (dB)
     this.muted = opts.muted ?? false;         // when true, pulses visually but plays no sound
     // Subdivision: how many times this object fires per master beat. 1 = on each
@@ -77,17 +81,23 @@ export default class PulseObject {
     // (fires late), ±0.5 is maximally off-beat — all while staying grid-locked. Held
     // as a fraction, not ms, so it keeps its meaning across tempo changes.
     this.phaseOffset = opts.phaseOffset ?? 0;
+    // Time signature (metronome only): sets the bar length, so the "downbeat" is beat 1
+    // of every bar. Stored as an "n/d" string; only the numerator (beats per bar) is
+    // used for now. Published to the grid by RtdManager._publishGrid.
+    this.timeSignature = opts.timeSignature ?? '4/4';
 
     // --- runtime state ---
     this.__scale = 1;
     this.selected = false;
-    this.__attachedShip = null;   // set when a downbeatGun is collected by the ship (game mode); it then rides on the ship
+    this.__attachedShip = null;   // set when a quad gun is collected by the ship (game mode); it then rides on the ship
+    this.__attachSlot = null;     // which ship grab point (index into SHIP_ATTACH_POINTS) it rides on
     // Beat clocks start locked to the grid so the first pulse lands on the next grid
     // beat, not an off-grid one at creation/load. __lastVisualBeat drives the (frame-
     // accurate) visual pulse; __scheduledThrough is how far ahead the audio has been
     // scheduled on the sample-accurate audio clock (see update / _scheduleAudio).
     const t0 = this.gameSession.timeManager.realTimeSinceStartup;
     this.__lastVisualBeat = this._beatAt(t0);
+    this.__lastDownbeat = this._downbeatAt(t0);   // for fire-on-downbeat (bar beat 1)
     this.__scheduledThrough = t0;
   }
 
@@ -118,6 +128,17 @@ export default class PulseObject {
     return anchor + Math.floor((t - anchor) / interval) * interval;
   }
 
+  // The most recent bar downbeat (bar beat 1) at or before t. A bar is beatsPerBar
+  // master beats long, anchored on barOrigin — the beat the music dropped on, so that
+  // moment is measure 1's downbeat (falls back to the grid epoch before any drop). So
+  // "downbeat" means every 4th beat in 4/4, every 3rd in 3/4, from the drop.
+  _downbeatAt(t) {
+    const grid = this._grid();
+    const origin = grid.barOrigin != null ? grid.barOrigin : grid.epoch;
+    const bar = grid.masterInterval * Math.max(1, grid.beatsPerBar || 4);
+    return origin + Math.floor((t - origin) / bar) * bar;
+  }
+
   update() {
     const t = this.gameSession.timeManager.realTimeSinceStartup;
 
@@ -135,10 +156,45 @@ export default class PulseObject {
     if (beat > this.__lastVisualBeat) {
       this.__lastVisualBeat = beat;
       this.__scale = this.pulseScale;
-      if (this.behavior && this.behavior !== 'none') runBehaviorOnBeat(this);
+      this._onBeat();
     }
+
+    // The bar downbeat (beat 1) is a separate, coarser event than the object's own beat,
+    // and it's what fire-on-downbeat keys off — so detect it independently of subdivision.
+    const db = this._downbeatAt(t);
+    if (db > this.__lastDownbeat) {
+      this.__lastDownbeat = db;
+      this._onDownbeat(this._barIndexAt(db));
+    }
+
     // Ease the scale back toward its rest size of 1.
     this.__scale += (1 - this.__scale) * this.relax;
+  }
+
+  // On the object's own (subdivided) beat: run whatever beat-driven behaviour is attached.
+  _onBeat() {
+    if (this.behavior && this.behavior !== 'none') runBehaviorOnBeat(this);
+  }
+
+  // On the bar downbeat: run downbeat-driven behaviours, and — because a collected quad
+  // gun fires by virtue of being attached — auto-fire it even with no behaviour set. The
+  // downbeat gun fires every bar (a normal shot); the four-measure gun fires a slow AOE
+  // shell on the downbeat of every 4th measure. The behaviour guard avoids a double shot
+  // when 'fire-on-downbeat' is also assigned.
+  _onDownbeat(barIndex) {
+    if (this.behavior && this.behavior !== 'none') runBehaviorOnDownbeat(this);
+    if (!this.__attachedShip || this.behavior === 'fire-on-downbeat') return;
+    if (this.kind === 'downbeatGun') fireOnDownbeat(this, this.gameSession);
+    else if (this.kind === 'fourMeasureGun' && barIndex % 4 === 0) fireAoeShell(this, this.gameSession);
+  }
+
+  // The bar (measure) index of a downbeat time — bars counted from barOrigin (the music
+  // drop = measure 1, index 0). Used to fire the four-measure gun on every 4th measure.
+  _barIndexAt(dbTime) {
+    const grid = this._grid();
+    const origin = grid.barOrigin != null ? grid.barOrigin : grid.epoch;
+    const bar = grid.masterInterval * Math.max(1, grid.beatsPerBar || 4);
+    return Math.round((dbTime - origin) / bar);
   }
 
   // Pre-schedule every grid beat that falls within the lookahead window at its exact
@@ -146,6 +202,9 @@ export default class PulseObject {
   // far ahead we've scheduled, so beats are enqueued exactly once. A stalled frame
   // (e.g. a backgrounded tab) is collapsed to "now", never a catch-up burst.
   _scheduleAudio(t) {
+    // A quad gun isn't a per-beat drum: it sounds when it fires (see playSoundNow), so
+    // skip the per-beat scheduling and let the shot carry the selected sound.
+    if (this.isQuad()) return;
     const grid = this._grid();
     const interval = grid.masterInterval / Math.max(0.01, this.division);
     const off = this.kind === 'metronome' ? 0 : this.phaseOffset;
@@ -167,9 +226,26 @@ export default class PulseObject {
     this.__scheduledThrough = horizon;
   }
 
+  // Play the object's selected sound immediately (honouring mute/volume). Used for an
+  // event-driven shot — the downbeat gun — so the sound syncs with the (frame-detected)
+  // fire, rather than the sample-accurate per-beat scheduling in _scheduleAudio.
+  playSoundNow() {
+    if (this.muted || !this.sound || this.sound === 'none') return;
+    const snd = this.gameSession.soundManager.getSound(this.sound);
+    if (snd && typeof snd.play === 'function') {
+      snd.play({ volume: this.volume, at: window.Tone ? Tone.now() : 0 });
+    }
+  }
+
+  // The quad-gun kinds: a free quadrilateral edited by corner handles, collected by the
+  // ship, and firing on the beat/measure. They share all shape/edit/collect behaviour and
+  // differ only in firing cadence and projectile (see _onDownbeat).
+  isQuad() { return this.kind === 'downbeatGun' || this.kind === 'fourMeasureGun'; }
+
   render() {
     if (this.kind === 'ship') this.renderShip();
-    else if (this.kind === 'downbeatGun') this.renderQuad();
+    else if (this.isQuad()) this.renderQuad();
+    else if (this.kind === 'metronome') this.renderMetronome();
     else this.renderCircle();
     this.renderSelection();
   }
@@ -184,22 +260,75 @@ export default class PulseObject {
     p.pop();
   }
 
+  // An iconic metronome: a trapezoid case (wide base, narrow top) with a pendulum that
+  // reaches an extreme on each beat and crosses centre between beats — so it visibly
+  // ticks the tempo — while the whole icon still pulses via __scale like every kind.
+  renderMetronome() {
+    const p = this.gameSession.p5;
+    const r = this.radius;
+    const grid = this._grid();
+    const t = this.gameSession.timeManager.realTimeSinceStartup;
+    const beats = grid.masterInterval > 0 ? (t - grid.epoch) / grid.masterInterval : 0;
+    const swing = 0.5 * Math.cos(Math.PI * beats);   // ±0.5 rad; extreme on the beat, centre between
+
+    const pivot = { x: 0, y: 0.55 * r };
+    const L = 1.4 * r;                                // pendulum length
+    const tip = { x: pivot.x + L * Math.sin(swing), y: pivot.y - L * Math.cos(swing) };
+    const bob = { x: pivot.x + 0.62 * L * Math.sin(swing), y: pivot.y - 0.62 * L * Math.cos(swing) };
+
+    p.push();
+    p.translate(this.x, this.y);
+    p.scale(this.__scale);
+
+    // case
+    p.noStroke();
+    p.fill(this.color);
+    p.beginShape();
+    p.vertex(-0.68 * r, 0.9 * r);
+    p.vertex(0.68 * r, 0.9 * r);
+    p.vertex(0.26 * r, -0.95 * r);
+    p.vertex(-0.26 * r, -0.95 * r);
+    p.endShape(p.CLOSE);
+
+    // pendulum rod, bob and pivot (dark, so they read against the case)
+    p.stroke(20, 18, 28);
+    p.strokeWeight(Math.max(1, 0.07 * r));
+    p.line(pivot.x, pivot.y, tip.x, tip.y);
+    p.noStroke();
+    p.fill(20, 18, 28);
+    p.push();
+    p.translate(bob.x, bob.y);
+    p.rotate(swing);
+    p.rectMode(p.CENTER);
+    p.rect(0, 0, 0.34 * r, 0.22 * r);   // sliding weight
+    p.pop();
+    p.circle(pivot.x, pivot.y, 0.16 * r);
+
+    p.pop();
+  }
+
   // A filled quadrilateral through the four corner verts (offsets from x,y), pulsing
   // about (x,y) like the other kinds. Its shape is edited via the corner handles.
   renderQuad() {
     const p = this.gameSession.p5;
     const sc = this.__scale;
-    // Once collected, the gun rides on the ship's front-left quarter (rotating with it)
-    // instead of sitting at its own position.
-    let bx = this.x, by = this.y, rot = 0;
-    if (this.__attachedShip) { const a = PulseObject.attachPoint(this.__attachedShip); bx = a.x; by = a.y; rot = this.__attachedShip.rotation; }
+    // Once collected, the gun rides on its assigned ship grab point (rotating with the
+    // ship) — attached by its centroid, so the verts are drawn relative to that centre.
+    // Otherwise it sits at its own position with verts offset from (x,y).
+    let bx = this.x, by = this.y, rot = 0, cx = 0, cy = 0;
+    if (this.__attachedShip) {
+      const pts = PulseObject.shipAttachPoints(this.__attachedShip);
+      const gp = pts[this.__attachSlot] || pts[0];
+      bx = gp.x; by = gp.y; rot = this.__attachedShip.rotation;
+      const ct = this.vertCentroid(); cx = ct.x; cy = ct.y;
+    }
     const c = Math.cos(rot), s = Math.sin(rot);
     p.push();
     p.noStroke();
     p.fill(this.color);
     p.beginShape();
     for (const v of this.verts) {
-      const vx = v.x * sc, vy = v.y * sc;
+      const vx = (v.x - cx) * sc, vy = (v.y - cy) * sc;
       p.vertex(bx + vx * c - vy * s, by + vx * s + vy * c);
     }
     p.endShape(p.CLOSE);
@@ -226,7 +355,7 @@ export default class PulseObject {
 
   // Index of the corner handle under (x,y) for this (selected) downbeatGun, or -1.
   cornerHandleAt(x, y) {
-    if (this.kind !== 'downbeatGun' || !this.selected) return -1;
+    if (!this.isQuad() || !this.selected) return -1;
     const r = PulseObject.HANDLE_HIT;
     const cs = this.corners();
     for (let i = 0; i < cs.length; i++) {
@@ -252,6 +381,19 @@ export default class PulseObject {
       this._drawShapes(child.shapes, s, col);
     }
     this._drawShapes(this.shapes, s, col);
+    this._renderAttachMarkers();
+  }
+
+  // Small translucent dots marking the ship's grab points (nose + fins), so their
+  // placement is visible while tuning. A collected gun sits on top of one of them.
+  _renderAttachMarkers() {
+    const p = this.gameSession.p5;
+    const d = Math.max(6, this.radius * 0.12);
+    p.push();
+    p.noStroke();
+    p.fill(255, 255, 255, 90);
+    for (const pt of PulseObject.shipAttachPoints(this)) p.circle(pt.x, pt.y, d);
+    p.pop();
   }
 
   // Rapid on/off blink for the flame — visibility only. A fast base rate plus a
@@ -279,7 +421,7 @@ export default class PulseObject {
   renderSelection() {
     if (!this.selected) return;
     const p = this.gameSession.p5;
-    if (this.kind === 'downbeatGun') { this._renderResizeHandles(p); return; }
+    if (this.isQuad()) { this._renderResizeHandles(p); return; }
     p.push();
     p.noFill();
     p.stroke(255, 255, 255, 180);
@@ -329,25 +471,43 @@ export default class PulseObject {
       muted: this.muted,
       division: this.division,
       phaseOffset: this.phaseOffset,
+      timeSignature: this.timeSignature,
     };
     if (this.kind === 'ship' && this.svg) s.svg = this.svg;
-    if (this.kind === 'downbeatGun') s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
+    if (this.isQuad()) s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
+    if (this.kind === 'fourMeasureGun') { s.projectileSpeed = this.projectileSpeed; s.aoeRadius = this.aoeRadius; }
     if (Object.keys(this.overrides).length) s.overrides = { ...this.overrides };
     return s;
   }
 
-  // Where the object currently lives in the world: the ship's attach point when it's a
-  // collected downbeatGun riding the ship, otherwise its own origin. Used by behaviours
-  // (e.g. fire-on-downbeat) so a collected gun fires from the ship, not its home spot.
+  // Local centroid (mean of the corner verts) — the quad's centre, as an offset from
+  // (x,y). The grab point that a collected gun snaps to the ship.
+  vertCentroid() {
+    const n = this.verts.length;
+    let cx = 0, cy = 0;
+    for (const v of this.verts) { cx += v.x; cy += v.y; }
+    return n ? { x: cx / n, y: cy / n } : { x: 0, y: 0 };
+  }
+
+  // Where the object currently lives in the world: its assigned ship grab point when
+  // collected, otherwise its own centre (the quad's centroid, else its origin). Used by
+  // behaviours (fire-on-downbeat) so a collected gun fires from the ship, not its home.
   worldOrigin() {
-    if (this.__attachedShip) return PulseObject.attachPoint(this.__attachedShip);
+    if (this.__attachedShip) {
+      const pts = PulseObject.shipAttachPoints(this.__attachedShip);
+      return pts[this.__attachSlot] || pts[0] || { x: this.x, y: this.y };
+    }
+    if (this.isQuad()) {
+      const c = this.vertCentroid();
+      return { x: this.x + c.x, y: this.y + c.y };
+    }
     return { x: this.x, y: this.y };
   }
 
   // Hit test in screen space (rest size). A downbeatGun tests its quad polygon; the
   // rest are circles by radius.
   contains(x, y) {
-    if (this.kind === 'downbeatGun') return PulseObject.pointInPoly(x, y, this.corners());
+    if (this.isQuad()) return PulseObject.pointInPoly(x, y, this.corners());
     const dx = x - this.x;
     const dy = y - this.y;
     return dx * dx + dy * dy <= this.radius * this.radius;
@@ -361,15 +521,24 @@ PulseObject.SHIP_REF_RADIUS = 100;
 PulseObject.HANDLE_SIZE = 9;
 PulseObject.HANDLE_HIT = 10;
 
-// World point a collected downbeatGun rides on: the ship's front-left quarter (front =
-// the nose direction = ship-local -Y, left = -X), rotated into world space.
-PulseObject.ATTACH_QUARTER = 0.5;
-PulseObject.ATTACH_NUDGE_X = 4;   // extra px further left of the front-left quarter
-PulseObject.attachPoint = (ship) => {
-  const off = ship.radius * PulseObject.ATTACH_QUARTER;
+// Grab points on the ship where collected guns attach, as ship-local offsets in
+// fractions of the ship's radius (front = the nose direction = ship-local -Y). A gun
+// snaps its centroid to the nearest free one. Tune the fractions to taste; later, guns
+// may carry their own grab offset. Order: nose, left fin, right fin.
+PulseObject.SHIP_ATTACH_POINTS = [
+  { x: 0,     y: -0.7 },    // nose
+  { x: -0.55, y: 0.55 },    // left fin
+  { x: 0.55,  y: 0.55 },    // right fin
+];
+
+// The ship's grab points in world space (rotated with the ship).
+PulseObject.shipAttachPoints = (ship) => {
+  const r = ship.radius;
   const c = Math.cos(ship.rotation), s = Math.sin(ship.rotation);
-  const lx = -off - PulseObject.ATTACH_NUDGE_X, ly = -off;   // front-left, nudged left
-  return { x: ship.x + lx * c - ly * s, y: ship.y + lx * s + ly * c };
+  return PulseObject.SHIP_ATTACH_POINTS.map((pt) => {
+    const lx = pt.x * r, ly = pt.y * r;
+    return { x: ship.x + lx * c - ly * s, y: ship.y + lx * s + ly * c };
+  });
 };
 
 // Rectangle as four corner-vertex offsets (from centre), the default downbeatGun shape.

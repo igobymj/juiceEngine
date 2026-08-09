@@ -140,13 +140,26 @@ export default class RtdEditor {
     this._wireControls(o);
   }
 
-  // A downbeatGun is a free quadrilateral shaped by dragging its corner handles on the
-  // canvas (no size slider); every other kind is sized by radius.
+  // A quad gun is a free quadrilateral shaped by dragging its corner handles on the
+  // canvas (no size slider); every other kind is sized by radius. The four-measure gun
+  // additionally exposes its shell's velocity and area-of-effect radius.
   _sizeHtml(o) {
-    if (o.kind === 'downbeatGun') {
-      return `
+    if (o.isQuad()) {
+      let html = `
         <p class="hint">Drag the corner handles on the canvas to shape it — each corner moves on its own.</p>
         <button data-ctrl="recenter">recenter origin</button>`;
+      if (o.kind === 'fourMeasureGun') {
+        html += `
+          <label class="slider">
+            <span class="row"><span>projectile velocity</span><span class="val" data-val="projectileSpeed">${o.projectileSpeed.toFixed(2)}</span></span>
+            <input type="range" min="0.1" max="1.5" step="0.05" value="${o.projectileSpeed}" data-ctrl="projectileSpeed">
+          </label>
+          <label class="slider">
+            <span class="row"><span>AOE radius</span><span class="val" data-val="aoeRadius">${o.aoeRadius.toFixed(0)} px</span></span>
+            <input type="range" min="20" max="300" step="5" value="${o.aoeRadius}" data-ctrl="aoeRadius">
+          </label>`;
+      }
+      return html;
     }
     const label = o.kind === 'ship' ? 'size' : 'radius';
     return `
@@ -172,6 +185,13 @@ export default class RtdEditor {
         <label class="slider">
           <span class="row"><span>phase align</span><span class="val" data-val="phaseOffset">${(o.phaseOffset ?? 0).toFixed(2)}</span></span>
           <input type="range" min="-0.5" max="0.5" step="0.01" value="${o.phaseOffset ?? 0}" data-ctrl="phaseOffset">
+        </label>
+
+        <label>
+          <span class="row" style="display:block; margin-bottom:4px;">time signature</span>
+          <select data-ctrl="timeSignature">${RtdEditor.TIME_SIGNATURES
+            .map((s) => `<option value="${s}" ${s === (o.timeSignature || '4/4') ? 'selected' : ''}>${s}</option>`)
+            .join('')}</select>
         </label>
 
         <label class="checkbox">
@@ -218,6 +238,17 @@ export default class RtdEditor {
     }
   }
 
+  // Audition an object's current sound when it's picked in the editor. Ignores mute so
+  // the choice is always audible as a preview; uses the object's own volume.
+  _previewSound(o) {
+    if (!o.sound || o.sound === 'none') return;
+    const sm = o.gameSession && o.gameSession.soundManager;
+    const snd = sm && sm.getSound(o.sound);
+    if (snd && typeof snd.play === 'function') {
+      snd.play({ volume: o.volume, at: window.Tone ? window.Tone.now() : 0 });
+    }
+  }
+
   _wireControls(o) {
     const $ = (sel) => this.panelEl.querySelector(sel);
 
@@ -244,6 +275,8 @@ export default class RtdEditor {
     slider('pulseScale', 'pulseScale', (v) => `${v.toFixed(2)}×`);
     slider('relax', 'relax', (v) => v.toFixed(2));
     slider('volume', 'volume', (v) => `${v.toFixed(0)} dB`);
+    slider('projectileSpeed', 'projectileSpeed', (v) => v.toFixed(2));
+    slider('aoeRadius', 'aoeRadius', (v) => `${v.toFixed(0)} px`);
 
     const divSel = $('[data-ctrl="division"]');
     if (divSel) divSel.addEventListener('change', (e) => { o.division = parseFloat(e.target.value); override('division'); });
@@ -251,11 +284,14 @@ export default class RtdEditor {
     const muteEl = $('[data-ctrl="muted"]');
     if (muteEl) muteEl.addEventListener('change', (e) => { o.muted = e.target.checked; override('muted'); });
 
+    const tsSel = $('[data-ctrl="timeSignature"]');
+    if (tsSel) tsSel.addEventListener('change', (e) => { o.timeSignature = e.target.value; override('timeSignature'); });
+
     const recenter = $('[data-ctrl="recenter"]');
     if (recenter) recenter.addEventListener('click', () => { o.recenterVerts(); });
 
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
-    $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; override('sound'); });
+    $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; override('sound'); this._previewSound(o); });
     $('[data-ctrl="behavior"]').addEventListener('change', (e) => { o.behavior = e.target.value; override('behavior'); });
     $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
 
@@ -274,6 +310,10 @@ export default class RtdEditor {
     });
   }
 }
+
+// Time signatures offered for the metronome. Only the numerator (beats per bar) is
+// used today, so 4/4 and 3/4 differ by bar length; extend as needed.
+RtdEditor.TIME_SIGNATURES = ['4/4', '3/4'];
 
 // Subdivision choices offered for non-metronome objects: pulses per master beat.
 RtdEditor.DIVISIONS = [

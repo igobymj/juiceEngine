@@ -32,7 +32,9 @@ export default class RtdManager extends Manager {
     // master metronome (see _publishGrid). masterInterval = ms per master beat;
     // epoch is the grid's phase anchor (0 for now — reserved for a future
     // metronome-driven groove shift). See PulseObject._grid / _beatAt.
-    this.beatGrid = { epoch: 0, masterInterval: RtdManager.DEFAULT_MASTER_INTERVAL };
+    // barOrigin: the beat time (realTimeSinceStartup, ms) the music dropped on — measure
+    // 1's downbeat. null until a drop; measures count from the grid epoch until then.
+    this.beatGrid = { epoch: 0, masterInterval: RtdManager.DEFAULT_MASTER_INTERVAL, beatsPerBar: 4, barOrigin: null };
     // Templates of prototypes whose on-canvas object was deleted — kept so the type
     // stays selectable in the create dropdown (and re-stampable). Plain records (from
     // serialize()), not live objects; persisted with the scene. See deleteSelected /
@@ -149,14 +151,31 @@ export default class RtdManager extends Manager {
     this.ship = this._findShip();
   }
 
-  // In game mode, a downbeatGun the ship overlaps is collected — it attaches to the
-  // ship and rides on its front-left quarter (rendered there, see PulseObject).
+  // In game mode, a quad gun the ship overlaps is collected — it attaches to the nearest
+  // free ship grab point (nose or a fin) and rides there by its centroid (see
+  // PulseObject.shipAttachPoints / worldOrigin). One gun per grab point.
   _collectGuns() {
     const ship = this.ship;
     if (!ship || ship.kind !== 'ship') return;
+    const points = PulseObject.shipAttachPoints(ship);
+    const occupied = new Set();
     for (const o of this.__objects) {
-      if (o.kind !== 'downbeatGun' || o.__attachedShip) continue;
-      if (this._shipTouchesGun(ship, o)) o.__attachedShip = ship;
+      if (o.__attachedShip === ship && o.__attachSlot != null) occupied.add(o.__attachSlot);
+    }
+    for (const o of this.__objects) {
+      if (!o.isQuad() || o.__attachedShip) continue;
+      if (!this._shipTouchesGun(ship, o)) continue;
+      const gc = o.worldOrigin();   // the gun's world centroid (it's not attached yet)
+      let best = -1, bestD = Infinity;
+      for (let i = 0; i < points.length; i++) {
+        if (occupied.has(i)) continue;
+        const d = Math.hypot(points[i].x - gc.x, points[i].y - gc.y);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (best === -1) continue;   // every grab point taken
+      o.__attachedShip = ship;
+      o.__attachSlot = best;
+      occupied.add(best);
     }
   }
 
@@ -172,7 +191,7 @@ export default class RtdManager extends Manager {
   }
 
   _clearGunAttachments() {
-    for (const o of this.__objects) if (o.__attachedShip) o.__attachedShip = null;
+    for (const o of this.__objects) if (o.__attachedShip) { o.__attachedShip = null; o.__attachSlot = null; }
   }
 
   // Set an object's name, keeping it unique among all objects (both collections).
@@ -371,10 +390,27 @@ export default class RtdManager extends Manager {
     const interval = master ? master.interval : RtdManager.DEFAULT_MASTER_INTERVAL;
     this.beatGrid.masterInterval = interval;
     this.beatGrid.epoch = master ? (master.phaseOffset ?? 0) * interval : 0;
+    // Bar length in master beats, from the metronome's time signature (numerator).
+    // Defines the downbeat (bar beat 1); defaults to 4/4 when there's no metronome.
+    this.beatGrid.beatsPerBar = RtdManager.beatsPerBar(master && master.timeSignature);
   }
 
   _findMaster() {
     return this.__objects.find((o) => o.kind === 'metronome') || null;
+  }
+
+  // Anchor the measure grid so `originTime` (a beat time, realTimeSinceStartup ms) is
+  // measure 1's downbeat — called when the music drops. Resets each object's downbeat
+  // clock so the downbeat at the new origin fires cleanly as the first measure.
+  anchorMeasures(originTime) {
+    this.beatGrid.barOrigin = originTime;
+    for (const o of this.__objects) o.__lastDownbeat = originTime - 1;
+  }
+
+  // Clear the measure anchor (new round): measures count from the grid epoch until the
+  // music next drops and re-anchors.
+  clearMeasureAnchor() {
+    this.beatGrid.barOrigin = null;
   }
 
   // Live grid phase = the master metronome's phaseOffset (a fraction of a beat, -0.5..0.5).
@@ -438,4 +474,10 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 
 // Properties an instance inherits from its prototype (the editor-editable ones).
 // Identity/placement (name, position, isPrototype) stay per-instance.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset'];
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectileSpeed', 'aoeRadius'];
+
+// Beats per bar from an "n/d" time-signature string (the numerator); 4 by default.
+RtdManager.beatsPerBar = (sig) => {
+  const n = parseInt(String(sig || '4/4').split('/')[0], 10);
+  return Number.isFinite(n) && n > 0 ? n : 4;
+};

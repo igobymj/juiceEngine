@@ -13,8 +13,12 @@
 import SampleSoundObject from "./SampleSoundObject.js";
 
 export default class MusicPlayer {
-	constructor(gameSession) {
+	constructor(gameSession, options = {}) {
 		this.__gameSession = gameSession;
+
+		// Native Tone looping by default. Pass { loop: false } to loop the track manually
+		// instead (e.g. RTD re-fires it on a downbeat — see makeMusicLoop).
+		this.__loop = options.loop ?? true;
 
 		// Output node — connected to SoundManager's __musicMix via registerSound.
 		this.__output = new Tone.Volume();
@@ -26,6 +30,11 @@ export default class MusicPlayer {
 
 	get currentUrl() {
 		return this.__currentUrl;
+	}
+
+	// Track length in seconds (0 until loaded), for scheduling a manual loop.
+	get duration() {
+		return this.__track ? this.__track.duration : 0;
 	}
 
 	// Point the player at a track (a media URL, or falsy/'none' to clear it).
@@ -41,7 +50,7 @@ export default class MusicPlayer {
 		if (!this.__currentUrl) return;
 
 		this.__track = new SampleSoundObject(this.__gameSession, this.__currentUrl, {
-			loop: true,
+			loop: this.__loop,
 			volume: 0,
 			onload: () => {
 				if (this.__pendingPlay) {

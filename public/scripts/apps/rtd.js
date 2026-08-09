@@ -183,11 +183,16 @@ export default {
     // Background music player on the music channel (shares the master mute and
     // setMusicVolume). Track/volume/play are driven from the EXTRAS fold; see
     // rtdExtraApply below. Convenience methods keep the extras handler tidy.
-    const music = new MusicPlayer(gs);
+    // Native Tone looping is off: RTD loops the track manually so each pass re-locks to
+    // the grid — when the clip ends, it re-fires from the top on the next downbeat.
+    const music = new MusicPlayer(gs, { loop: false });
     gs.soundManager.registerSound('music', music, 'music');
     gs.soundManager.selectMusic = (url) => music.loadTrack(url);
     gs.soundManager.playMusic = (opts) => music.playTrack(opts);
     gs.soundManager.stopMusic = () => music.stopTrack();
+
+    rtd.__musicLoop = makeMusicLoop(gs, rtd, music);
+    gs.gameLoop.addUpdateSystem('rtd-music-loop', rtd.__musicLoop, 5);
 
     // Asteroids: drift, despawn off-screen, respawn when the field is cleared.
     // Bullets ask asteroidManager.collide(); a hit fires the asteroidHit event.
@@ -271,6 +276,7 @@ export default {
       ensureMetronomePrototype(gs, rtd);   // always offered in the editor's prototype dropdown
       ensureDrumKickPrototype(gs, rtd);
       ensureDownbeatGunPrototype(gs, rtd);
+      ensureFourMeasureGunPrototype(gs, rtd);
     };
     if (gs.canvasWidth > 0) {
       initScene();
@@ -289,6 +295,8 @@ const RTD_BEAT_WINDOW_MS = 250;   // ~0.25s
 // hits FIRE on it (see tryDropMusic).
 function armMusicDrop(gs, rtd) {
   rtd.__musicDropped = false;
+  if (rtd.__musicLoop) rtd.__musicLoop.stop();   // no manual loop until the next drop
+  rtd.clearMeasureAnchor();   // measures re-anchor to the beat the music next drops on
   const track = (gs.juiceSettings.container.music || {}).track;
   gs.soundManager.selectMusic(track || 'none');   // loadTrack holds it stopped until played
 }
@@ -306,10 +314,53 @@ function tryDropMusic(gs, rtd) {
   const phase = (((t - grid.epoch) % interval) + interval) % interval;
   if (Math.min(phase, interval - phase) > RTD_BEAT_WINDOW_MS) return;    // off the beat — no drop
   rtd.__musicDropped = true;
+  // The music lands on the nearest beat (see musicSnapOpts); make that beat measure 1's
+  // downbeat so measures — and the four-measure gun — count from the drop.
+  rtd.anchorMeasures(grid.epoch + Math.round((t - grid.epoch) / interval) * interval);
   // Start snapped to the beat. Pass a function so the snap is (re)computed against the
   // grid at the instant playback actually begins — correct even if the track was still
   // loading when FIRE was pressed (armMusicDrop usually preloads it, but not always).
   gs.soundManager.playMusic(() => musicSnapOpts(gs, rtd));
+  if (rtd.__musicLoop) rtd.__musicLoop.start(t);   // begin the manual downbeat-aligned loop
+}
+
+// Manual, downbeat-aligned music loop. Native Tone looping is off (see the MusicPlayer
+// setup); instead, once the clip's length is known we schedule its re-fire for the first
+// downbeat at/after the clip ends, so every loop re-locks to the measure grid (and any
+// gap between the clip's end and that downbeat is intended silence). Runs as an update
+// system; acts only while the music has dropped and we're in game mode.
+function makeMusicLoop(gs, rtd, music) {
+  let refireAt = null;      // realtime (ms) to restart the track, or null = unscheduled
+  let playingSince = null;  // realtime (ms) the current pass (re)started
+
+  const nextDownbeat = (t) => {
+    const g = rtd.beatGrid;
+    if (!g || !g.masterInterval) return null;
+    const origin = g.barOrigin != null ? g.barOrigin : g.epoch;
+    const bar = g.masterInterval * Math.max(1, g.beatsPerBar || 4);
+    return origin + Math.ceil((t - origin) / bar - 1e-6) * bar;   // first downbeat >= t
+  };
+
+  return {
+    // Begin looping from a pass that (re)started at `startRealtime`.
+    start(startRealtime) { playingSince = startRealtime; refireAt = null; },
+    stop() { playingSince = null; refireAt = null; },
+    update() {
+      if (playingSince == null || rtd.mode !== 'game' || !rtd.__musicDropped) return;
+      const now = gs.timeManager.realTimeSinceStartup;
+      // Schedule the re-fire once the clip length is known (0 until the buffer loads).
+      if (refireAt == null) {
+        const dur = music.duration;
+        if (dur > 0) refireAt = nextDownbeat(playingSince + dur * 1000);
+        return;
+      }
+      if (now >= refireAt) {
+        gs.soundManager.playMusic();   // re-fire from the top on the downbeat
+        playingSince = now;
+        refireAt = null;               // reschedule from the new pass next frame
+      }
+    },
+  };
 }
 
 // Tone start options that land the track on the nearest grid beat: an upcoming beat
@@ -421,6 +472,24 @@ function ensureDownbeatGunPrototype(gs, rtd) {
     collection: 'objects',
     select: false,
     x: gs.canvasWidth / 2 + 120,
+    y: gs.canvasHeight / 2 + 120,
+    bpm: 100,
+    sound: 'none',
+  });
+}
+
+// Guarantee the four-measure-gun prototype exists — a quad gun (edited like the downbeat
+// gun) that fires a slow, large AOE shell on the downbeat of every 4th measure. Shell
+// velocity and AOE radius are tuned in the object editor. Silent by default.
+function ensureFourMeasureGunPrototype(gs, rtd) {
+  if (rtd.prototypes.some((o) => o.kind === 'fourMeasureGun') || rtd.hasRetainedKind('fourMeasureGun')) return;
+  rtd.createObject({
+    name: 'four measure gun',
+    kind: 'fourMeasureGun',
+    isPrototype: true,
+    collection: 'objects',
+    select: false,
+    x: gs.canvasWidth / 2 - 120,
     y: gs.canvasHeight / 2 + 120,
     bpm: 100,
     sound: 'none',
