@@ -116,9 +116,10 @@ export default class RtdSequencer {
   // Populate the "fires" dropdown with the scene's projectile prototypes, selecting the
   // gun's attached one (kept selectable even if the projectile was since deleted).
   _fillProjectiles(o) {
+    const bare = (n) => (this.rtd._bareName ? this.rtd._bareName(n) : n);
     const names = (this.rtd.objects || [])
       .filter((p) => p.kind === 'projectile')
-      .map((p) => p.name)
+      .map((p) => bare(p.name))
       .filter((n, i, a) => n && a.indexOf(n) === i);
     const cur = o.projectile || 'bullet';
     if (cur && !names.includes(cur)) names.unshift(cur);

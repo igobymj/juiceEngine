@@ -113,7 +113,7 @@
           "y": 12.75
         }
       ],
-      "projectile": "shell",
+      "projectile": "projectile",
       "patternMeasures": 4,
       "patternSteps": [
         0
@@ -186,7 +186,7 @@
       "beatpulse": 0
     },
     "obj-21": {
-      "name": "p_shell",
+      "name": "p_projectile",
       "kind": "projectile",
       "isPrototype": true,
       "prototypeId": null,
@@ -236,7 +236,7 @@
       "svg": "media/svg/spaceship.svg"
     },
     "obj-22": {
-      "name": "shell",
+      "name": "projectile",
       "kind": "projectile",
       "isPrototype": false,
       "prototypeId": "obj-21",

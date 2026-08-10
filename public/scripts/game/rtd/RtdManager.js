@@ -401,10 +401,12 @@ export default class RtdManager extends Manager {
     return this.__objects.find((o) => o.kind === 'metronome') || null;
   }
 
-  // Resolve a gun's attached projectile (by prototype name) to a plain definition the
-  // ProjectileManager can spawn. Falls back to a fast plain bullet if it's missing.
+  // Resolve a gun's attached projectile (referenced by its bare, prefix-free name) to a
+  // plain definition the ProjectileManager can spawn — matching a prototype or instance
+  // regardless of the "p_" prefix, preferring a prototype. Falls back to a plain bullet.
   projectileDef(name) {
-    const p = this.__objects.find((o) => o.kind === 'projectile' && o.name === name);
+    const matches = this.__objects.filter((o) => o.kind === 'projectile' && this._bareName(o.name) === name);
+    const p = matches.find((o) => o.isPrototype) || matches[0];
     if (!p) return { shape: 'circle', fill: true, size: 6, color: '#ffffff', speed: 1, explodes: false, aoeRadius: 90, lifetime: 800, spinSpeed: 0, beatpulse: 0 };
     return {
       shape: p.shape, fill: p.fill, size: p.size, color: p.color, speed: p.speed,
