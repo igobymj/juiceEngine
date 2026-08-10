@@ -31,10 +31,7 @@ export default class RtdSequencer {
             <option value="4">4</option><option value="8">8</option>
           </select> measures</label>
         <label class="seq-ctl">fires
-          <select data-seq="projectile">
-            <option value="bullet">bullet</option>
-            <option value="shell">AOE shell</option>
-          </select></label>
+          <select data-seq="projectile"></select></label>
       </div>
       <div class="seq-gridwrap">
         <div class="seq-grid" data-seq="grid"></div>
@@ -58,7 +55,7 @@ export default class RtdSequencer {
     });
     this.projectileSel.addEventListener('change', (e) => {
       const o = this._sel();
-      if (o) { o.projectileType = e.target.value; this._override(o, 'projectileType'); }
+      if (o) { o.projectile = e.target.value; this._override(o, 'projectile'); }
     });
     this.gridEl.addEventListener('click', (e) => {
       const cell = e.target.closest('[data-step]');
@@ -104,7 +101,7 @@ export default class RtdSequencer {
   _rebuild(o, measures, spb) {
     this.titleEl.textContent = o.name || 'gun';
     this.measuresSel.value = String(measures);
-    this.projectileSel.value = o.projectileType || 'bullet';
+    this._fillProjectiles(o);
     const phraseLen = measures * spb;
     let html = '';
     for (let s = 0; s < phraseLen; s++) {
@@ -114,6 +111,20 @@ export default class RtdSequencer {
       html += `<div class="${cls.join(' ')}" data-step="${s}"></div>`;
     }
     this.gridEl.innerHTML = html;
+  }
+
+  // Populate the "fires" dropdown with the scene's projectile prototypes, selecting the
+  // gun's attached one (kept selectable even if the projectile was since deleted).
+  _fillProjectiles(o) {
+    const names = (this.rtd.objects || [])
+      .filter((p) => p.kind === 'projectile')
+      .map((p) => p.name)
+      .filter((n, i, a) => n && a.indexOf(n) === i);
+    const cur = o.projectile || 'bullet';
+    if (cur && !names.includes(cur)) names.unshift(cur);
+    this.projectileSel.innerHTML = names.length
+      ? names.map((n) => `<option value="${n}" ${n === cur ? 'selected' : ''}>${n}</option>`).join('')
+      : `<option value="${cur}" selected>${cur}</option>`;
   }
 
   _refreshActive(o) {

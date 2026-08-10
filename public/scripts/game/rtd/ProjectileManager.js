@@ -10,7 +10,7 @@
  */
 
 import Bullet from "./Bullet.js";
-import Shell from "./Shell.js";
+import Projectile from "./Projectile.js";
 
 const AMMO_LIMIT = 6;
 
@@ -38,10 +38,11 @@ export default class ProjectileManager {
     }
   }
 
-  // Spawn a slow, large AOE shell (the four-measure gun). opts: { speed, aoe, color }.
-  // Shares the projectile list/update/render; not ammo-limited since it fires rarely.
-  fireShell(position, angle, opts = {}) {
-    this.__bullets.push(new Shell(this.gs, position, angle, opts));
+  // Spawn a projectile from an authored definition (a gun's attached projectile). `def`
+  // carries shape/fill/size/color/speed/explodes/aoeRadius/lifetime/spinSpeed/beatpulse
+  // (+ gunPulseScale). Shares the projectile list; not ammo-limited (guns fire on-grid).
+  spawn(position, angle, def = {}) {
+    this.__bullets.push(new Projectile(this.gs, position, angle, def));
   }
 
   update() {

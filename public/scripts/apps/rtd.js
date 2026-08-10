@@ -289,6 +289,7 @@ export default {
       rtd.restoreRetainedPrototypes(saved.retainedPrototypes);   // templates of deleted prototypes
       ensureMetronomePrototype(gs, rtd);   // always offered in the editor's prototype dropdown
       ensureDrumKickPrototype(gs, rtd);
+      ensureProjectilePrototypes(gs, rtd);   // before the guns, which reference them by name
       ensureDownbeatGunPrototype(gs, rtd);
       ensureFourMeasureGunPrototype(gs, rtd);
     };
@@ -508,6 +509,24 @@ function ensureFourMeasureGunPrototype(gs, rtd) {
     y: gs.canvasHeight / 2 + 120,
     bpm: 100,
     sound: 'none',
+  });
+}
+
+// Guarantee the built-in projectile presets exist — the definitions guns fire and the
+// user extends. 'bullet' (fast, small, no AOE) and 'projectile' (slow, large, explodes)
+// match the old hardcoded types, so guns referencing them by name keep firing as before.
+function ensureProjectilePrototypes(gs, rtd) {
+  if (rtd.prototypes.some((o) => o.kind === 'projectile') || rtd.hasRetainedKind('projectile')) return;
+  const y = gs.canvasHeight / 2 + 200;
+  rtd.createObject({
+    name: 'bullet', kind: 'projectile', isPrototype: true, collection: 'objects', select: false,
+    x: gs.canvasWidth / 2 - 40, y,
+    shape: 'circle', fill: true, size: 6, color: '#ffe08a', speed: 1.0, explodes: false, lifetime: 800,
+  });
+  rtd.createObject({
+    name: 'projectile', kind: 'projectile', isPrototype: true, collection: 'objects', select: false,
+    x: gs.canvasWidth / 2 + 40, y,
+    shape: 'circle', fill: true, size: 12, color: '#e0567b', speed: 0.3, explodes: true, aoeRadius: 90, lifetime: 4000,
   });
 }
 

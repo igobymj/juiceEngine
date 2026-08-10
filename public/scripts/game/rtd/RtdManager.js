@@ -369,7 +369,9 @@ export default class RtdManager extends Manager {
   // it exists nothing is hidden. Game and editor share the 'game' collection, so
   // this per-object check is what tells them apart.
   _hiddenInGame(o) {
-    return o.kind === 'metronome' && this.modes && this.modes.current === 'game';
+    // Metronome (beat reference) and projectile (a fired-from definition, not a placed
+    // object) are design-space only — hidden and inert in real game play.
+    return (o.kind === 'metronome' || o.kind === 'projectile') && this.modes && this.modes.current === 'game';
   }
 
   update() {
@@ -397,6 +399,18 @@ export default class RtdManager extends Manager {
 
   _findMaster() {
     return this.__objects.find((o) => o.kind === 'metronome') || null;
+  }
+
+  // Resolve a gun's attached projectile (by prototype name) to a plain definition the
+  // ProjectileManager can spawn. Falls back to a fast plain bullet if it's missing.
+  projectileDef(name) {
+    const p = this.__objects.find((o) => o.kind === 'projectile' && o.name === name);
+    if (!p) return { shape: 'circle', fill: true, size: 6, color: '#ffffff', speed: 1, explodes: false, aoeRadius: 90, lifetime: 800, spinSpeed: 0, beatpulse: 0 };
+    return {
+      shape: p.shape, fill: p.fill, size: p.size, color: p.color, speed: p.speed,
+      explodes: p.explodes, aoeRadius: p.aoeRadius, lifetime: p.lifetime,
+      spinSpeed: p.spinSpeed, beatpulse: p.beatpulse,
+    };
   }
 
   // Anchor the measure grid so `originTime` (a beat time, realTimeSinceStartup ms) is
@@ -474,7 +488,7 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 
 // Properties an instance inherits from its prototype (the editor-editable ones).
 // Identity/placement (name, position, isPrototype) stay per-instance.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectileType', 'patternMeasures', 'patternSteps', 'projectileSpeed', 'aoeRadius'];
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectile', 'patternMeasures', 'patternSteps', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
 
 // Beats per bar from an "n/d" time-signature string (the numerator); 4 by default.
 RtdManager.beatsPerBar = (sig) => {

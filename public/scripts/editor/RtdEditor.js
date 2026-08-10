@@ -73,6 +73,7 @@ export default class RtdEditor {
   }
 
   _renderControls(o) {
+    if (o.kind === 'projectile') return this._renderProjectile(o);
     // A leading "none" option lets an object pulse silently. It's selected
     // whenever the object has no sound (or the sentinel 'none').
     const hasSound = o.sound && o.sound !== 'none';
@@ -140,28 +141,80 @@ export default class RtdEditor {
     this._wireControls(o);
   }
 
+  // A projectile definition (kind 'projectile') — a template a gun fires. Appearance
+  // borrows the particle system (shape / fill / size / color); plus behaviour (speed,
+  // explode-on-impact + AOE radius, lifetime) and animation (rotation spin, beat-pulse).
+  _renderProjectile(o) {
+    const shapeOpts = RtdEditor.PROJECTILE_SHAPES
+      .map((s) => `<option value="${s}" ${s === (o.shape || 'circle') ? 'selected' : ''}>${s}</option>`).join('');
+    this.panelEl.innerHTML = `
+      ${this._headerHtml()}
+      <h3>${this._esc(o.name ?? 'projectile')}</h3>
+      <label><span class="row" style="display:block; margin-bottom:4px;">name</span>
+        <input type="text" value="${this._esc(o.name ?? '')}" data-ctrl="name"></label>
+      <label class="checkbox"><input type="checkbox" data-ctrl="isPrototype" ${o.isPrototype ? 'checked' : ''}> prototype (template for new objects)</label>
+
+      <label><span class="row" style="display:block; margin-bottom:4px;">shape</span>
+        <select data-ctrl="shape">${shapeOpts}</select></label>
+      <label class="checkbox"><input type="checkbox" data-ctrl="fill" ${o.fill ? 'checked' : ''}> fill (else outline)</label>
+      <label class="slider"><span class="row"><span>size</span><span class="val" data-val="size">${o.size.toFixed(0)} px</span></span>
+        <input type="range" min="2" max="60" step="1" value="${o.size}" data-ctrl="size"></label>
+      <label><span class="row" style="display:block; margin-bottom:4px;">color</span>
+        <input type="color" value="${o.color}" data-ctrl="color"></label>
+
+      <label class="slider"><span class="row"><span>speed</span><span class="val" data-val="speed">${o.speed.toFixed(2)}</span></span>
+        <input type="range" min="0.1" max="2" step="0.05" value="${o.speed}" data-ctrl="speed"></label>
+      <label class="checkbox"><input type="checkbox" data-ctrl="explodes" ${o.explodes ? 'checked' : ''}> explodes (area of effect)</label>
+      <label class="slider"><span class="row"><span>AOE radius</span><span class="val" data-val="aoeRadius">${o.aoeRadius.toFixed(0)} px</span></span>
+        <input type="range" min="20" max="300" step="5" value="${o.aoeRadius}" data-ctrl="aoeRadius"></label>
+      <label class="slider"><span class="row"><span>lifetime</span><span class="val" data-val="lifetime">${o.lifetime.toFixed(0)} ms</span></span>
+        <input type="range" min="200" max="5000" step="100" value="${o.lifetime}" data-ctrl="lifetime"></label>
+
+      <label class="slider"><span class="row"><span>rotation</span><span class="val" data-val="spinSpeed">${o.spinSpeed.toFixed(3)}</span></span>
+        <input type="range" min="-0.02" max="0.02" step="0.001" value="${o.spinSpeed}" data-ctrl="spinSpeed"></label>
+      <label class="slider"><span class="row"><span>beatpulse</span><span class="val" data-val="beatpulse">${o.beatpulse.toFixed(2)}</span></span>
+        <input type="range" min="0" max="1" step="0.05" value="${o.beatpulse}" data-ctrl="beatpulse"></label>
+
+      <button data-ctrl="delete" class="danger">delete object</button>
+    `;
+    this._wireHeader();
+    this._wireProjectile(o);
+  }
+
+  _wireProjectile(o) {
+    const $ = (sel) => this.panelEl.querySelector(sel);
+    const override = (key) => { if (!o.isPrototype) (o.overrides || (o.overrides = {}))[key] = true; };
+    const slider = (ctrl, key, fmt) => {
+      const el = $(`[data-ctrl="${ctrl}"]`);
+      if (!el) return;
+      el.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value); o[key] = v; override(key);
+        const n = $(`[data-val="${ctrl}"]`); if (n) n.textContent = fmt(v);
+      });
+    };
+    slider('size', 'size', (v) => `${v.toFixed(0)} px`);
+    slider('speed', 'speed', (v) => v.toFixed(2));
+    slider('aoeRadius', 'aoeRadius', (v) => `${v.toFixed(0)} px`);
+    slider('lifetime', 'lifetime', (v) => `${v.toFixed(0)} ms`);
+    slider('spinSpeed', 'spinSpeed', (v) => v.toFixed(3));
+    slider('beatpulse', 'beatpulse', (v) => v.toFixed(2));
+    $('[data-ctrl="shape"]').addEventListener('change', (e) => { o.shape = e.target.value; override('shape'); });
+    $('[data-ctrl="fill"]').addEventListener('change', (e) => { o.fill = e.target.checked; override('fill'); });
+    $('[data-ctrl="explodes"]').addEventListener('change', (e) => { o.explodes = e.target.checked; override('explodes'); });
+    $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
+    $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
+    $('[data-ctrl="name"]').addEventListener('change', (e) => { this.manager.renameObject(o, e.target.value); this._refresh(); });
+    $('[data-ctrl="isPrototype"]').addEventListener('change', (e) => { o.isPrototype = e.target.checked; this.manager.renameObject(o, o.name); this._refresh(); });
+  }
+
   // A quad gun is a free quadrilateral shaped by dragging its corner handles on the
-  // canvas (no size slider); every other kind is sized by radius. The four-measure gun
-  // additionally exposes its shell's velocity and area-of-effect radius.
+  // canvas (no size slider); every other kind is sized by radius. What a gun fires — and
+  // when — lives in the sequencer strip (projectile dropdown + trigger pattern).
   _sizeHtml(o) {
     if (o.isQuad()) {
-      let html = `
+      return `
         <p class="hint">Drag the corner handles on the canvas to shape it — each corner moves on its own.</p>
         <button data-ctrl="recenter">recenter origin</button>`;
-      // Shell params show when the gun fires an AOE shell (projectile type is set in the
-      // sequencer strip). Re-select the gun after switching type to refresh these.
-      if (o.projectileType === 'shell') {
-        html += `
-          <label class="slider">
-            <span class="row"><span>projectile velocity</span><span class="val" data-val="projectileSpeed">${o.projectileSpeed.toFixed(2)}</span></span>
-            <input type="range" min="0.1" max="1.5" step="0.05" value="${o.projectileSpeed}" data-ctrl="projectileSpeed">
-          </label>
-          <label class="slider">
-            <span class="row"><span>AOE radius</span><span class="val" data-val="aoeRadius">${o.aoeRadius.toFixed(0)} px</span></span>
-            <input type="range" min="20" max="300" step="5" value="${o.aoeRadius}" data-ctrl="aoeRadius">
-          </label>`;
-      }
-      return html;
     }
     const label = o.kind === 'ship' ? 'size' : 'radius';
     return `
@@ -279,8 +332,6 @@ export default class RtdEditor {
     slider('pulseScale', 'pulseScale', (v) => `${v.toFixed(2)}×`);
     slider('relax', 'relax', (v) => v.toFixed(2));
     slider('volume', 'volume', (v) => `${v.toFixed(0)} dB`);
-    slider('projectileSpeed', 'projectileSpeed', (v) => v.toFixed(2));
-    slider('aoeRadius', 'aoeRadius', (v) => `${v.toFixed(0)} px`);
 
     const divSel = $('[data-ctrl="division"]');
     if (divSel) divSel.addEventListener('change', (e) => { o.division = parseFloat(e.target.value); override('division'); });
@@ -318,6 +369,9 @@ export default class RtdEditor {
 // Time signatures offered for the metronome. Only the numerator (beats per bar) is
 // used today, so 4/4 and 3/4 differ by bar length; extend as needed.
 RtdEditor.TIME_SIGNATURES = ['4/4', '3/4'];
+
+// Projectile shapes, borrowed from the particle system.
+RtdEditor.PROJECTILE_SHAPES = ['circle', 'square', 'triangle', 'line'];
 
 // Subdivision choices offered for non-metronome objects: pulses per master beat.
 RtdEditor.DIVISIONS = [

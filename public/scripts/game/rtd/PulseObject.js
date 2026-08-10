@@ -15,7 +15,7 @@
  * unscaled realTimeSinceStartup clock so the beat stays steady.
  */
 
-import { runBehaviorOnBeat, runBehaviorOnDownbeat, fireOnDownbeat, fireAoeShell } from "./behaviors.js";
+import { runBehaviorOnBeat, runBehaviorOnDownbeat, fireProjectile } from "./behaviors.js";
 
 export default class PulseObject {
   constructor(gameSession, opts = {}) {
@@ -65,15 +65,28 @@ export default class PulseObject {
     this.relax = opts.relax ?? 0.16;          // ease-back per frame toward rest (0..1)
     this.sound = opts.sound ?? 'kick';        // registered sound name to play on beat
     this.behavior = opts.behavior ?? 'none';  // attached behaviour name (see behaviors.js)
-    // Gun firing (quad kinds). A projectile type — 'bullet' or a slow AOE 'shell' — plus
-    // an editable trigger pattern: an N-measure phrase of eighth-note steps, stored as the
-    // active step indices. The two gun kinds are presets: downbeatGun = bullet firing step
-    // 0 of a 1-measure phrase; fourMeasureGun = shell firing step 0 of a 4-measure phrase.
-    // Shell shot speed (px/ms, slow) and blast radius (px) are also tuned in the editor.
-    this.projectileType = opts.projectileType ?? (this.kind === 'fourMeasureGun' ? 'shell' : 'bullet');
+    // Gun firing (quad kinds): a reference (by name) to the 'projectile' prototype it
+    // fires, plus an editable trigger pattern (an N-measure phrase of eighth-note steps,
+    // stored as active step indices). The gun kinds are presets: downbeatGun fires the
+    // 'bullet' preset on step 0 of a 1-measure phrase; fourMeasureGun fires the
+    // 'projectile' preset on step 0 of a 4-measure phrase. Migrates the old projectileType
+    // enum, mapping its legacy 'shell' value to the renamed 'projectile' preset.
+    const projRef = opts.projectile ?? opts.projectileType ?? (this.kind === 'fourMeasureGun' ? 'projectile' : 'bullet');
+    this.projectile = projRef === 'shell' ? 'projectile' : projRef;
     this.patternMeasures = opts.patternMeasures ?? (this.kind === 'fourMeasureGun' ? 4 : 1);
     this.patternSteps = Array.isArray(opts.patternSteps) ? [...opts.patternSteps] : [0];
-    this.projectileSpeed = opts.projectileSpeed ?? 0.3;
+
+    // Projectile-definition params (kind 'projectile'), appearance borrowed from the
+    // particle system. `rotation` is the object transform, so the spin animation is
+    // spinSpeed; aoeRadius is the blast radius (also the legacy gun field name).
+    this.shape = opts.shape ?? 'circle';      // circle | square | triangle | line
+    this.fill = opts.fill ?? true;            // filled vs outline
+    this.size = opts.size ?? 8;               // half-extent (px)
+    this.speed = opts.speed ?? 0.6;           // px/ms in flight
+    this.explodes = opts.explodes ?? false;   // AOE blast on impact / at end of range
+    this.lifetime = opts.lifetime ?? 1500;    // ms of flight
+    this.spinSpeed = opts.spinSpeed ?? 0;     // rotation animation (rad/ms)
+    this.beatpulse = opts.beatpulse ?? 0;     // 0..1: 0=no pulse, 0.5=firing gun's pulse, 1=double
     this.aoeRadius = opts.aoeRadius ?? 90;
     this.volume = opts.volume ?? -6;          // per-object playback level (dB)
     this.muted = opts.muted ?? false;         // when true, pulses visually but plays no sound
@@ -202,10 +215,9 @@ export default class PulseObject {
     if (this.patternSteps.includes(local)) this._fireGun();
   }
 
-  // Fire the gun's projectile at its current position: a slow AOE shell, or a bullet.
+  // Fire the gun's attached projectile from its current position.
   _fireGun() {
-    if (this.projectileType === 'shell') fireAoeShell(this, this.gameSession);
-    else fireOnDownbeat(this, this.gameSession);
+    fireProjectile(this, this.gameSession);
   }
 
   // Pre-schedule every grid beat that falls within the lookahead window at its exact
@@ -213,9 +225,9 @@ export default class PulseObject {
   // far ahead we've scheduled, so beats are enqueued exactly once. A stalled frame
   // (e.g. a backgrounded tab) is collapsed to "now", never a catch-up burst.
   _scheduleAudio(t) {
-    // A quad gun isn't a per-beat drum: it sounds when it fires (see playSoundNow), so
-    // skip the per-beat scheduling and let the shot carry the selected sound.
-    if (this.isQuad()) return;
+    // A quad gun isn't a per-beat drum (it sounds when it fires, see playSoundNow), and a
+    // projectile definition is a silent template — neither does per-beat scheduling.
+    if (this.isQuad() || this.kind === 'projectile') return;
     const grid = this._grid();
     const interval = grid.masterInterval / Math.max(0.01, this.division);
     const off = this.kind === 'metronome' ? 0 : this.phaseOffset;
@@ -257,8 +269,28 @@ export default class PulseObject {
     if (this.kind === 'ship') this.renderShip();
     else if (this.isQuad()) this.renderQuad();
     else if (this.kind === 'metronome') this.renderMetronome();
+    else if (this.kind === 'projectile') this.renderProjectilePreview();
     else this.renderCircle();
     this.renderSelection();
+  }
+
+  // A projectile definition shows as a static preview of its shape/fill/size/color where
+  // it's authored (its position is meaningless — it's a template a gun fires copies of).
+  renderProjectilePreview() {
+    const p = this.gameSession.p5;
+    const c = p.color(this.color);
+    p.push();
+    p.translate(this.x, this.y);
+    if (this.fill) { p.noStroke(); p.fill(c); } else { p.noFill(); p.stroke(c); p.strokeWeight(2); }
+    if (this.shape === 'circle') {
+      p.ellipse(0, 0, this.size * 2);
+    } else {
+      const v = PulseObject.projectileShapeVerts(this.shape, this.size);
+      p.beginShape();
+      for (const pt of v) p.vertex(pt.x, pt.y);
+      if (this.shape !== 'line') p.endShape(p.CLOSE); else p.endShape();
+    }
+    p.pop();
   }
 
   renderCircle() {
@@ -433,11 +465,12 @@ export default class PulseObject {
     if (!this.selected) return;
     const p = this.gameSession.p5;
     if (this.isQuad()) { this._renderResizeHandles(p); return; }
+    const r = this.kind === 'projectile' ? Math.max(10, this.size) : this.radius;
     p.push();
     p.noFill();
     p.stroke(255, 255, 255, 180);
     p.strokeWeight(1.5);
-    p.circle(this.x, this.y, this.radius * 2 + 14);
+    p.circle(this.x, this.y, r * 2 + 14);
     p.pop();
   }
 
@@ -487,11 +520,14 @@ export default class PulseObject {
     if (this.kind === 'ship' && this.svg) s.svg = this.svg;
     if (this.isQuad()) {
       s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
-      s.projectileType = this.projectileType;
+      s.projectile = this.projectile;
       s.patternMeasures = this.patternMeasures;
       s.patternSteps = [...this.patternSteps];
-      s.projectileSpeed = this.projectileSpeed;
-      s.aoeRadius = this.aoeRadius;
+    }
+    if (this.kind === 'projectile') {
+      s.shape = this.shape; s.fill = this.fill; s.size = this.size; s.speed = this.speed;
+      s.explodes = this.explodes; s.aoeRadius = this.aoeRadius; s.lifetime = this.lifetime;
+      s.spinSpeed = this.spinSpeed; s.beatpulse = this.beatpulse;
     }
     if (Object.keys(this.overrides).length) s.overrides = { ...this.overrides };
     return s;
@@ -527,7 +563,8 @@ export default class PulseObject {
     if (this.isQuad()) return PulseObject.pointInPoly(x, y, this.corners());
     const dx = x - this.x;
     const dy = y - this.y;
-    return dx * dx + dy * dy <= this.radius * this.radius;
+    const r = this.kind === 'projectile' ? Math.max(10, this.size) : this.radius;   // preview is size, not radius
+    return dx * dx + dy * dy <= r * r;
   }
 }
 
@@ -562,6 +599,18 @@ PulseObject.shipAttachPoints = (ship) => {
 PulseObject.rectVerts = (w, h) => {
   const hw = w / 2, hh = h / 2;
   return [{ x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }];
+};
+
+// Vertices for a projectile shape at a given half-size, borrowed from the particle
+// system (circle draws as an ellipse; these verts are the square-boundary fallback).
+// Shared by the projectile preview (PulseObject) and the flying Projectile.
+PulseObject.projectileShapeVerts = (shape, size) => {
+  switch (shape) {
+    case 'square':   return [{ x: -size, y: size }, { x: size, y: size }, { x: size, y: -size }, { x: -size, y: -size }];
+    case 'triangle': return [{ x: -size, y: size / 2 }, { x: size, y: size / 2 }, { x: 0, y: -size }];
+    case 'line':     return [{ x: -size, y: 0 }, { x: size, y: 0 }];
+    default:         return [{ x: -size, y: -size }, { x: size, y: -size }, { x: size, y: size }, { x: -size, y: size }];
+  }
 };
 
 // Ray-casting point-in-polygon (works for any quad, incl. concave / self-intersecting).
