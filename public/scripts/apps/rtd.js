@@ -29,6 +29,7 @@ import AsteroidManager from "../game/rtd/AsteroidManager.js";
 import RtdExplosionSound from "../game/rtd/RtdExplosionSound.js";
 import ModeManager from "../engine/ModeManager.js";
 import PerfOverlay from "../engine/PerfOverlay.js";
+import RtdSequencer from "../editor/RtdSequencer.js";
 import MusicPlayer from "../engine/sounds/MusicPlayer.js";
 import { registerToneSynths } from "../engine/sounds/toneSynths.js";
 import { loadSvg, normalizeShapes, svgToVectorObjects } from "../engine/loaders/SvgImport.js";
@@ -92,6 +93,15 @@ export function pointerGuard(x, y, gs) {
   if (y < MODE_BAR_H) return true;
   const rtd = gs.rtdManager;
   const mode = rtd && rtd.modes && rtd.modes.current;
+  // The sequencer strip (bottom, when a gun is selected) swallows its own clicks. x,y are
+  // canvas-relative (the canvas sits below the tab bar), so convert to client coords via
+  // the canvas offset before testing which element is actually under the pointer.
+  const seq = document.getElementById('rtd-sequencer');
+  if (seq && seq.style.display !== 'none') {
+    const cr = (document.getElementById('canvas') || document.body).getBoundingClientRect();
+    const el = document.elementFromPoint(x + cr.left, y + cr.top);
+    if (el && seq.contains(el)) return true;
+  }
   if (mode === 'objects' || mode === 'editor') return x > gs.canvasWidth - 300;   // panel width
   return false;
 }
@@ -221,6 +231,10 @@ export default {
     // (master metronome's phaseOffset) to lock the pulse to the music mid-play. Shown
     // only in game mode (CSS, via the body.mode-game class); mirrors the editor control.
     gs.gameLoop.addRenderSystem('rtd-phase-ui', makePhaseSlider(gs, rtd), 998);
+
+    // Gun-trigger step sequencer (bottom strip): edits the selected quad gun's N-measure,
+    // eighth-note trigger pattern, phrase length and projectile type, with a live playhead.
+    gs.gameLoop.addRenderSystem('rtd-sequencer', new RtdSequencer(rtd, gs), 997);
 
     // Three modes (like primitives): 'objects' edits/selects via the object editor;
     // 'game' is the play scene (starfield, ship, asteroids, bullets); 'editor' is
@@ -356,6 +370,7 @@ function makeMusicLoop(gs, rtd, music) {
       }
       if (now >= refireAt) {
         gs.soundManager.playMusic();   // re-fire from the top on the downbeat
+        rtd.anchorMeasures(refireAt);  // loop restart is a fresh measure 1 — reset the beat counter
         playingSince = now;
         refireAt = null;               // reschedule from the new pass next frame
       }

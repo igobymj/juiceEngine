@@ -65,8 +65,14 @@ export default class PulseObject {
     this.relax = opts.relax ?? 0.16;          // ease-back per frame toward rest (0..1)
     this.sound = opts.sound ?? 'kick';        // registered sound name to play on beat
     this.behavior = opts.behavior ?? 'none';  // attached behaviour name (see behaviors.js)
-    // Four-measure-gun shell params (ignored by other kinds): shot speed (px/ms, slow)
-    // and the blast area-of-effect radius (px). Both tuned in the object editor.
+    // Gun firing (quad kinds). A projectile type — 'bullet' or a slow AOE 'shell' — plus
+    // an editable trigger pattern: an N-measure phrase of eighth-note steps, stored as the
+    // active step indices. The two gun kinds are presets: downbeatGun = bullet firing step
+    // 0 of a 1-measure phrase; fourMeasureGun = shell firing step 0 of a 4-measure phrase.
+    // Shell shot speed (px/ms, slow) and blast radius (px) are also tuned in the editor.
+    this.projectileType = opts.projectileType ?? (this.kind === 'fourMeasureGun' ? 'shell' : 'bullet');
+    this.patternMeasures = opts.patternMeasures ?? (this.kind === 'fourMeasureGun' ? 4 : 1);
+    this.patternSteps = Array.isArray(opts.patternSteps) ? [...opts.patternSteps] : [0];
     this.projectileSpeed = opts.projectileSpeed ?? 0.3;
     this.aoeRadius = opts.aoeRadius ?? 90;
     this.volume = opts.volume ?? -6;          // per-object playback level (dB)
@@ -97,7 +103,7 @@ export default class PulseObject {
     // scheduled on the sample-accurate audio clock (see update / _scheduleAudio).
     const t0 = this.gameSession.timeManager.realTimeSinceStartup;
     this.__lastVisualBeat = this._beatAt(t0);
-    this.__lastDownbeat = this._downbeatAt(t0);   // for fire-on-downbeat (bar beat 1)
+    this.__lastStep = this._stepAt(t0);   // eighth-note step clock (downbeats + gun trigger patterns)
     this.__scheduledThrough = t0;
   }
 
@@ -128,15 +134,21 @@ export default class PulseObject {
     return anchor + Math.floor((t - anchor) / interval) * interval;
   }
 
-  // The most recent bar downbeat (bar beat 1) at or before t. A bar is beatsPerBar
-  // master beats long, anchored on barOrigin — the beat the music dropped on, so that
-  // moment is measure 1's downbeat (falls back to the grid epoch before any drop). So
-  // "downbeat" means every 4th beat in 4/4, every 3rd in 3/4, from the drop.
-  _downbeatAt(t) {
+  // The eighth-note step index at time t, counted from barOrigin — the beat the music
+  // dropped on, so its step 0 is measure 1's downbeat (falls back to the grid epoch before
+  // any drop). A step is half a master beat; a measure is beatsPerBar*2 steps. Drives the
+  // bar-downbeat behaviours and each gun's editable trigger pattern.
+  _stepAt(t) {
     const grid = this._grid();
     const origin = grid.barOrigin != null ? grid.barOrigin : grid.epoch;
-    const bar = grid.masterInterval * Math.max(1, grid.beatsPerBar || 4);
-    return origin + Math.floor((t - origin) / bar) * bar;
+    const stepInterval = grid.masterInterval / 2;
+    return Math.floor((t - origin) / stepInterval);
+  }
+
+  // Steps per bar for the current time signature (eighth notes: beatsPerBar * 2).
+  _stepsPerBar() {
+    const grid = this._grid();
+    return Math.max(1, grid.beatsPerBar || 4) * 2;
   }
 
   update() {
@@ -159,12 +171,13 @@ export default class PulseObject {
       this._onBeat();
     }
 
-    // The bar downbeat (beat 1) is a separate, coarser event than the object's own beat,
-    // and it's what fire-on-downbeat keys off — so detect it independently of subdivision.
-    const db = this._downbeatAt(t);
-    if (db > this.__lastDownbeat) {
-      this.__lastDownbeat = db;
-      this._onDownbeat(this._barIndexAt(db));
+    // The eighth-note step grid drives the bar-downbeat behaviours and each gun's trigger
+    // pattern, independently of the object's own subdivision. Detect the newest step only,
+    // so a lagged frame collapses to one event rather than a catch-up burst.
+    const step = this._stepAt(t);
+    if (step > this.__lastStep) {
+      this.__lastStep = step;
+      this._onStep(step);
     }
 
     // Ease the scale back toward its rest size of 1.
@@ -176,25 +189,23 @@ export default class PulseObject {
     if (this.behavior && this.behavior !== 'none') runBehaviorOnBeat(this);
   }
 
-  // On the bar downbeat: run downbeat-driven behaviours, and — because a collected quad
-  // gun fires by virtue of being attached — auto-fire it even with no behaviour set. The
-  // downbeat gun fires every bar (a normal shot); the four-measure gun fires a slow AOE
-  // shell on the downbeat of every 4th measure. The behaviour guard avoids a double shot
-  // when 'fire-on-downbeat' is also assigned.
-  _onDownbeat(barIndex) {
-    if (this.behavior && this.behavior !== 'none') runBehaviorOnDownbeat(this);
-    if (!this.__attachedShip || this.behavior === 'fire-on-downbeat') return;
-    if (this.kind === 'downbeatGun') fireOnDownbeat(this, this.gameSession);
-    else if (this.kind === 'fourMeasureGun' && barIndex % 4 === 0) fireAoeShell(this, this.gameSession);
+  // On each eighth-note step: fire downbeat behaviours on bar beat 1, and fire a collected
+  // gun whenever the step lands on an active cell of its trigger pattern (phrase-wrapped
+  // over patternMeasures). The behaviour guard avoids a double shot when the redundant
+  // 'fire-on-downbeat' behaviour is also assigned to a gun.
+  _onStep(step) {
+    const stepsPerBar = this._stepsPerBar();
+    if (step % stepsPerBar === 0 && this.behavior && this.behavior !== 'none') runBehaviorOnDownbeat(this);
+    if (!this.isQuad() || !this.__attachedShip || this.behavior === 'fire-on-downbeat') return;
+    const phraseLen = Math.max(1, this.patternMeasures) * stepsPerBar;
+    const local = ((step % phraseLen) + phraseLen) % phraseLen;
+    if (this.patternSteps.includes(local)) this._fireGun();
   }
 
-  // The bar (measure) index of a downbeat time — bars counted from barOrigin (the music
-  // drop = measure 1, index 0). Used to fire the four-measure gun on every 4th measure.
-  _barIndexAt(dbTime) {
-    const grid = this._grid();
-    const origin = grid.barOrigin != null ? grid.barOrigin : grid.epoch;
-    const bar = grid.masterInterval * Math.max(1, grid.beatsPerBar || 4);
-    return Math.round((dbTime - origin) / bar);
+  // Fire the gun's projectile at its current position: a slow AOE shell, or a bullet.
+  _fireGun() {
+    if (this.projectileType === 'shell') fireAoeShell(this, this.gameSession);
+    else fireOnDownbeat(this, this.gameSession);
   }
 
   // Pre-schedule every grid beat that falls within the lookahead window at its exact
@@ -474,8 +485,14 @@ export default class PulseObject {
       timeSignature: this.timeSignature,
     };
     if (this.kind === 'ship' && this.svg) s.svg = this.svg;
-    if (this.isQuad()) s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
-    if (this.kind === 'fourMeasureGun') { s.projectileSpeed = this.projectileSpeed; s.aoeRadius = this.aoeRadius; }
+    if (this.isQuad()) {
+      s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
+      s.projectileType = this.projectileType;
+      s.patternMeasures = this.patternMeasures;
+      s.patternSteps = [...this.patternSteps];
+      s.projectileSpeed = this.projectileSpeed;
+      s.aoeRadius = this.aoeRadius;
+    }
     if (Object.keys(this.overrides).length) s.overrides = { ...this.overrides };
     return s;
   }

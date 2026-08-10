@@ -37,6 +37,13 @@
           "y": -13.25
         }
       ],
+      "projectileType": "bullet",
+      "patternMeasures": 1,
+      "patternSteps": [
+        0
+      ],
+      "projectileSpeed": 0.3,
+      "aoeRadius": 90,
       "overrides": {
         "pulseScale": true,
         "sound": true,
@@ -108,6 +115,11 @@
           "y": 12.75
         }
       ],
+      "projectileType": "shell",
+      "patternMeasures": 4,
+      "patternSteps": [
+        0
+      ],
       "projectileSpeed": 0.3,
       "aoeRadius": 90
     },
@@ -116,7 +128,7 @@
       "kind": "ship",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 637,
+      "x": 609,
       "y": 675,
       "radius": 37,
       "color": "#cfc7e6",
@@ -131,6 +143,43 @@
       "phaseOffset": 0,
       "timeSignature": "4/4",
       "svg": "media/svg/spaceship.svg"
+    },
+    "obj-19": {
+      "name": "offbeater",
+      "kind": "fourMeasureGun",
+      "isPrototype": false,
+      "prototypeId": "obj-18",
+      "x": 659.75,
+      "y": 699.75,
+      "color": "#5b8ee1",
+      "verts": [
+        {
+          "x": -5.75,
+          "y": -9.75
+        },
+        {
+          "x": 8.25,
+          "y": -2.75
+        },
+        {
+          "x": 6.25,
+          "y": 10.25
+        },
+        {
+          "x": -8.75,
+          "y": 2.25
+        }
+      ],
+      "patternMeasures": 1,
+      "patternSteps": [
+        0,
+        4
+      ],
+      "overrides": {
+        "color": true,
+        "patternMeasures": true,
+        "patternSteps": true
+      }
     }
   },
   "retainedPrototypes": [

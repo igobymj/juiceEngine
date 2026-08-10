@@ -148,7 +148,9 @@ export default class RtdEditor {
       let html = `
         <p class="hint">Drag the corner handles on the canvas to shape it — each corner moves on its own.</p>
         <button data-ctrl="recenter">recenter origin</button>`;
-      if (o.kind === 'fourMeasureGun') {
+      // Shell params show when the gun fires an AOE shell (projectile type is set in the
+      // sequencer strip). Re-select the gun after switching type to refresh these.
+      if (o.projectileType === 'shell') {
         html += `
           <label class="slider">
             <span class="row"><span>projectile velocity</span><span class="val" data-val="projectileSpeed">${o.projectileSpeed.toFixed(2)}</span></span>
@@ -169,10 +171,12 @@ export default class RtdEditor {
       </label>`;
   }
 
-  // The metronome is the master clock, so it shows a tempo; every other object shows
-  // its subdivision (a rational multiple of the master beat) plus a phase offset, and
-  // locks to the grid the metronome sets.
+  // The metronome is the master clock, so it shows a tempo; a rhythm object shows its
+  // subdivision (a rational multiple of the master beat) plus a phase offset, and locks
+  // to the grid the metronome sets. A quad gun shows neither: the step sequencer owns its
+  // timing (eighth-note granular), so subdivision/phase would only be a redundant control.
   _timingHtml(o) {
+    if (o.isQuad()) return '';
     if (o.kind === 'metronome') {
       // The metronome's phase manually aligns the whole grid — slide it to lock the
       // pulse to a fixed music track (see RtdManager._publishGrid).

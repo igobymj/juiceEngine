@@ -136,7 +136,7 @@ export default class RtdManager extends Manager {
       const ov = o.overrides;
       for (const k of RtdManager.INHERITED) {
         if (ov && ov[k]) continue;   // per-instance override keeps its own value
-        o[k] = proto[k];
+        o[k] = Array.isArray(proto[k]) ? [...proto[k]] : proto[k];   // clone arrays (e.g. patternSteps)
       }
     }
   }
@@ -404,7 +404,7 @@ export default class RtdManager extends Manager {
   // clock so the downbeat at the new origin fires cleanly as the first measure.
   anchorMeasures(originTime) {
     this.beatGrid.barOrigin = originTime;
-    for (const o of this.__objects) o.__lastDownbeat = originTime - 1;
+    for (const o of this.__objects) o.__lastStep = -1;   // step 0 (the new measure 1) fires cleanly
   }
 
   // Clear the measure anchor (new round): measures count from the grid epoch until the
@@ -474,7 +474,7 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 
 // Properties an instance inherits from its prototype (the editor-editable ones).
 // Identity/placement (name, position, isPrototype) stay per-instance.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectileSpeed', 'aoeRadius'];
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectileType', 'patternMeasures', 'patternSteps', 'projectileSpeed', 'aoeRadius'];
 
 // Beats per bar from an "n/d" time-signature string (the numerator); 4 by default.
 RtdManager.beatsPerBar = (sig) => {
