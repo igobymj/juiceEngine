@@ -10,7 +10,7 @@
 // the referenced projectile definition (resolved by RtdManager). Gameplay only —
 // projectiles are driven in game mode — so it no-ops elsewhere, which also stops them
 // accumulating while a disabled projectile system can't despawn them. Used by a collected
-// gun (PulseObject._fireGun) and the fire-on-downbeat behaviour alike; the gun's beat-pulse
+// launcher (PulseObject._fireLauncher) and the fire-on-downbeat behaviour alike; the launcher's beat-pulse
 // amount is passed so the projectile can inherit it (beatpulse).
 export function fireProjectile(obj, gs) {
   const rtd = gs.rtdManager;
@@ -19,7 +19,7 @@ export function fireProjectile(obj, gs) {
   if (!proj) return;
   const def = rtd.projectileDef(obj.projectile);
   const o = obj.worldOrigin();
-  proj.spawn(gs.p5.createVector(o.x, o.y), -Math.PI / 2, { ...def, gunPulseScale: obj.pulseScale });
+  proj.spawn(gs.p5.createVector(o.x, o.y), -Math.PI / 2, { ...def, launcherPulseScale: obj.pulseScale });
   obj.playSoundNow();   // the shot carries the object's selected sound
 }
 

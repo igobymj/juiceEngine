@@ -1,10 +1,10 @@
 /*
- * Projectile — a gun's shot, built from an authored projectile definition.
+ * Projectile — a launcher's shot, built from an authored projectile definition.
  *
  * One parameterised projectile replaces the old fixed Bullet/Shell split: appearance
  * (shape/fill/size/color, borrowed from the particle system) and behaviour (speed,
  * explode-on-impact + AOE radius, lifetime) and animation (spin, beat-pulse) all come
- * from the definition the firing gun references. Extends VectorGameObject so it collides
+ * from the definition the firing launcher references. Extends VectorGameObject so it collides
  * with asteroids like the other projectiles; render() draws the chosen shape itself.
  */
 
@@ -30,9 +30,9 @@ export default class Projectile extends VectorGameObject {
     this.__lifetime = def.lifetime ?? 1500;
     this.__spin = def.spinSpeed ?? 0;                                   // radians per ms
     this.__rot = 0;
-    // Beat-pulse amplitude relative to the firing gun (0 = none, 0.5 = the gun's pulse,
-    // 1.0 = double it): pulse scale = 1 + 2*beatpulse*(gunPulseScale - 1).
-    this.__pulseAmt = 2 * (def.beatpulse ?? 0) * ((def.gunPulseScale ?? 1) - 1);
+    // Beat-pulse amplitude relative to the firing launcher (0 = none, 0.5 = the launcher's pulse,
+    // 1.0 = double it): pulse scale = 1 + 2*beatpulse*(launcherPulseScale - 1).
+    this.__pulseAmt = 2 * (def.beatpulse ?? 0) * ((def.launcherPulseScale ?? 1) - 1);
     this.__pulse = 1;
     this.__start = gameSession.timeManager.time;
     this.__delta = this.p5.createVector(0, 0);
@@ -69,14 +69,17 @@ export default class Projectile extends VectorGameObject {
       this.__pulse += (1 - this.__pulse) * 0.18;   // ease back to rest
     }
 
+    // Radius-based hit test (a moving disc of __size) — robust and forgiving. An exploder
+    // detonates its AOE on contact; a plain projectile destroys the rock it hits.
     const asteroids = this.gameSession.asteroidManager;
-    if (this.__explodes) {
-      if (asteroids && asteroids.collide(this, false)) { this._detonate(); return false; }
-      if (this.expired()) { this._detonate(); return false; }
-    } else {
-      if (asteroids && asteroids.collide(this, true)) return false;
-      if (this.expired()) return false;
+    if (asteroids && typeof asteroids.projectileHit === 'function') {
+      const hit = asteroids.projectileHit(this.__position, this.__size);
+      if (hit >= 0) {
+        if (this.__explodes) this._detonate(); else asteroids.destroyAt(hit);
+        return false;
+      }
     }
+    if (this.expired()) { if (this.__explodes) this._detonate(); return false; }
     if (this.offScreen()) return false;
     return true;
   }

@@ -22,10 +22,10 @@
       "volume": -11,
       "play": true
     },
-    "bulletFire": {
+    "projectileFire": {
       "sound": {
         "active": true,
-        "synth": "bullet",
+        "synth": "projectile",
         "clip": "none",
         "volume": -12,
         "rate": 1

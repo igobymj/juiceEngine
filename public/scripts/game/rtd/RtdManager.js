@@ -58,9 +58,12 @@ export default class RtdManager extends Manager {
     return out;
   }
 
-  // Load retained prototype templates from a saved scene (see serialize).
+  // Load retained prototype templates from a saved scene (see serialize), migrating any
+  // legacy kind names so the seeder guards (hasRetainedKind) match the current kinds.
   restoreRetainedPrototypes(list) {
-    this.__retainedPrototypes = Array.isArray(list) ? list.slice() : [];
+    this.__retainedPrototypes = Array.isArray(list)
+      ? list.map((r) => ({ ...r, kind: PulseObject.MIGRATE_KIND[r.kind] || r.kind }))
+      : [];
   }
 
   // Whether a prototype of this kind was deleted (kept as a retained template). The
@@ -146,52 +149,53 @@ export default class RtdManager extends Manager {
   setMode(mode) {
     if (mode === this.mode) return;
     this.select(null);
-    this._clearGunAttachments();   // collection is game-runtime only; reset on any mode change
+    this._clearLauncherAttachments();   // collection is game-runtime only; reset on any mode change
     this.mode = mode;
     this.ship = this._findShip();
   }
 
-  // In game mode, a quad gun the ship overlaps is collected — it attaches to the nearest
-  // free ship grab point (nose or a fin) and rides there by its centroid (see
-  // PulseObject.shipAttachPoints / worldOrigin). One gun per grab point.
-  _collectGuns() {
+  // In game mode a quad launcher is collected only when the ship's grab point for the
+  // launcher's chosen zone (attachPoint: nose | left | right) actually overlaps it — you
+  // have to touch the launcher with the RIGHT part of the ship. It then rides on that point
+  // by its centroid (see PulseObject.shipAttachPoints / worldOrigin). One launcher per grab
+  // point: a chosen point already taken by another launcher blocks collection.
+  _collectLaunchers() {
     const ship = this.ship;
     if (!ship || ship.kind !== 'ship') return;
     const points = PulseObject.shipAttachPoints(ship);
+    const zoneR = ship.radius * PulseObject.ATTACH_ZONE;
     const occupied = new Set();
     for (const o of this.__objects) {
       if (o.__attachedShip === ship && o.__attachSlot != null) occupied.add(o.__attachSlot);
     }
     for (const o of this.__objects) {
-      if (!o.isQuad() || o.__attachedShip) continue;
-      if (!this._shipTouchesGun(ship, o)) continue;
-      const gc = o.worldOrigin();   // the gun's world centroid (it's not attached yet)
-      let best = -1, bestD = Infinity;
-      for (let i = 0; i < points.length; i++) {
-        if (occupied.has(i)) continue;
-        const d = Math.hypot(points[i].x - gc.x, points[i].y - gc.y);
-        if (d < bestD) { bestD = d; best = i; }
-      }
-      if (best === -1) continue;   // every grab point taken
+      if (!o.isQuad() || o.__attachedShip || o.__expired) continue;   // consumed launchers stay gone
+      const slot = PulseObject.ATTACH_SLOT[o.attachPoint] ?? 0;   // its designated point
+      if (occupied.has(slot)) continue;                           // that point is already taken
+      if (!this._zoneTouchesLauncher(points[slot], zoneR, o)) continue;   // wrong part of the ship
       o.__attachedShip = ship;
-      o.__attachSlot = best;
-      occupied.add(best);
+      o.__attachSlot = slot;
+      o.__attachTime = this.gameSession.timeManager.realTimeSinceStartup;   // start the lifespan clock
+      occupied.add(slot);
     }
   }
 
-  // Forgiving overlap so flying over any part of the visible gun collects it: the ship
-  // (a circle of ~radius at its centre) reaches the gun when its centre is inside the
-  // gun's quad, or the gun's origin or a corner is within the ship's radius. Origin
-  // distance alone misses a reshaped gun whose body sits away from its origin point.
-  _shipTouchesGun(ship, gun) {
-    const r = ship.radius;
-    if (gun.contains(ship.x, ship.y)) return true;
-    if (Math.hypot(gun.x - ship.x, gun.y - ship.y) < r) return true;
-    return gun.corners().some((c) => Math.hypot(c.x - ship.x, c.y - ship.y) < r);
+  // Whether a ship grab-point zone (a disc of `radius` at `point`) overlaps the launcher:
+  // the point is inside the launcher's quad, or its origin or a corner is within the zone.
+  // (Origin distance alone misses a reshaped launcher whose body sits away from its origin.)
+  _zoneTouchesLauncher(point, radius, launcher) {
+    if (launcher.contains(point.x, point.y)) return true;
+    if (Math.hypot(launcher.x - point.x, launcher.y - point.y) < radius) return true;
+    return launcher.corners().some((c) => Math.hypot(c.x - point.x, c.y - point.y) < radius);
   }
 
-  _clearGunAttachments() {
-    for (const o of this.__objects) if (o.__attachedShip) { o.__attachedShip = null; o.__attachSlot = null; }
+  // Reset all launcher runtime state (attachment + lifespan) — collection and consumption
+  // are per-round, so a mode change restores every launcher to the scene.
+  _clearLauncherAttachments() {
+    for (const o of this.__objects) {
+      if (!o.isQuad()) continue;
+      o.__attachedShip = null; o.__attachSlot = null; o.__attachTime = null; o.__expired = false; o.__alpha = 1;
+    }
   }
 
   // Set an object's name, keeping it unique among all objects (both collections).
@@ -324,7 +328,7 @@ export default class RtdManager extends Manager {
   // drag on it; releasing ends the drag. No-op during gameplay (see interactive).
   mousePressed(x, y) {
     if (!this.interactive) return;
-    // A selected downbeatGun's corner handle starts reshaping that one vertex — checked
+    // A selected downbeatLauncher's corner handle starts reshaping that one vertex — checked
     // first, since a handle sits on the shape's edge and takes priority over relocating.
     if (this.selected && this.selected.cornerHandleAt) {
       const vi = this.selected.cornerHandleAt(x, y);
@@ -369,16 +373,17 @@ export default class RtdManager extends Manager {
   // it exists nothing is hidden. Game and editor share the 'game' collection, so
   // this per-object check is what tells them apart.
   _hiddenInGame(o) {
+    if (!this.modes || this.modes.current !== 'game') return false;
     // Metronome (beat reference) and projectile (a fired-from definition, not a placed
-    // object) are design-space only — hidden and inert in real game play.
-    return (o.kind === 'metronome' || o.kind === 'projectile') && this.modes && this.modes.current === 'game';
+    // object) are design-space only. A consumed launcher (lifespan spent) is gone too.
+    return o.kind === 'metronome' || o.kind === 'projectile' || o.__expired;
   }
 
   update() {
     this._publishGrid();                  // master metronome sets the shared tempo first
     this.moveShip();
     this.syncInstancesFromPrototypes();   // instances honor their prototype each frame
-    if (this.mode === 'game') this._collectGuns();   // ship picks up downbeat guns it touches
+    if (this.mode === 'game') this._collectLaunchers();   // ship picks up downbeat launchers it touches
     for (const o of this.objects) { if (this._hiddenInGame(o)) continue; o.update(); }
   }
 
@@ -401,7 +406,7 @@ export default class RtdManager extends Manager {
     return this.__objects.find((o) => o.kind === 'metronome') || null;
   }
 
-  // Resolve a gun's attached projectile (referenced by its bare, prefix-free name) to a
+  // Resolve a launcher's attached projectile (referenced by its bare, prefix-free name) to a
   // plain definition the ProjectileManager can spawn — matching a prototype or instance
   // regardless of the "p_" prefix, preferring a prototype. Falls back to a plain bullet.
   projectileDef(name) {
@@ -490,7 +495,7 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 
 // Properties an instance inherits from its prototype (the editor-editable ones).
 // Identity/placement (name, position, isPrototype) stay per-instance.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectile', 'patternMeasures', 'patternSteps', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectile', 'patternMeasures', 'patternSteps', 'attachPoint', 'lifespanPhrases', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
 
 // Beats per bar from an "n/d" time-signature string (the numerator); 4 by default.
 RtdManager.beatsPerBar = (sig) => {

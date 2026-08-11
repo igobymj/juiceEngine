@@ -3,7 +3,7 @@
  *
  * Adapted from the asteroids project, RTD-owned: asteroids drift and despawn when
  * they leave the screen (no wrapping), and a fresh wave respawns once they're all
- * gone. `collide()` is called by bullets; a hit plays the explosion sound, spawns
+ * gone. `collide()` is called by projectiles; a hit plays the explosion sound, spawns
  * a particle burst, splits the rock into two smaller ones, and removes it.
  *
  * Registered as an update + render system; the app enables it only in game mode
@@ -85,6 +85,27 @@ export default class AsteroidManager extends Manager {
   explode(asteroid) {
     // The juice event carries the effects (particle burst, screen shake).
     if (this.event) this.gameSession.juiceEventManager.addNew(this.event, asteroid);
+  }
+
+  // Radius-based hit test for a moving projectile (a disc of `radius` at `center`): the
+  // index of the first asteroid it overlaps, or -1. Circle-vs-circle against each rock's
+  // body (~0.42 of its bounding diagonal), which is robust and cheap.
+  projectileHit(center, radius) {
+    const p5 = this.gameSession.p5;
+    for (let i = 0; i < this.__asteroids.length; i++) {
+      const a = this.__asteroids[i];
+      if (p5.dist(center.x, center.y, a.position.x, a.position.y) <= radius + a.diagonal * 0.42) return i;
+    }
+    return -1;
+  }
+
+  // Destroy the asteroid at index i (explode, split, remove) — a direct projectile hit.
+  destroyAt(i) {
+    const a = this.__asteroids[i];
+    if (!a) return;
+    this.explode(a);
+    if (a.nextType !== "none") this.spawnAsteroid(2, a.nextType, a.position.x, a.position.y);
+    this.__asteroids.splice(i, 1);
   }
 
   // Area-of-effect blast (a Shell detonation): destroy every asteroid whose body falls

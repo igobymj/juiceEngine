@@ -2,11 +2,11 @@
   "objects": {
     "obj-15": {
       "name": "downbeat gun left",
-      "kind": "downbeatGun",
+      "kind": "downbeatLauncher",
       "isPrototype": false,
       "prototypeId": "obj-14",
-      "x": 474.25,
-      "y": 623.25,
+      "x": 472.25,
+      "y": 624.25,
       "radius": 60,
       "color": "#7bd88b",
       "bpm": 100,
@@ -37,16 +37,18 @@
           "y": -13.25
         }
       ],
-      "projectile": "bullet",
+      "projectile": "projectile",
       "patternMeasures": 1,
       "patternSteps": [
-        0
+        0,
+        3
       ],
       "overrides": {
         "pulseScale": true,
         "sound": true,
         "volume": true,
-        "phaseOffset": true
+        "phaseOffset": true,
+        "patternSteps": true
       }
     },
     "obj-17": {
@@ -78,11 +80,11 @@
     },
     "obj-18": {
       "name": "p_four measure gun",
-      "kind": "fourMeasureGun",
+      "kind": "fourMeasureLauncher",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 501.25,
-      "y": 574.25,
+      "x": 1086.25,
+      "y": 650.25,
       "radius": 60,
       "color": "#e0567b",
       "bpm": 100,
@@ -113,7 +115,7 @@
           "y": 12.75
         }
       ],
-      "projectile": "projectile",
+      "projectile": "fat_sam",
       "patternMeasures": 4,
       "patternSteps": [
         0
@@ -121,7 +123,7 @@
     },
     "obj-19": {
       "name": "offbeater",
-      "kind": "fourMeasureGun",
+      "kind": "fourMeasureLauncher",
       "isPrototype": false,
       "prototypeId": "obj-18",
       "x": 659.75,
@@ -145,6 +147,7 @@
           "y": 2.25
         }
       ],
+      "projectile": "blue_bomb",
       "patternMeasures": 1,
       "patternSteps": [
         0,
@@ -153,18 +156,19 @@
       "overrides": {
         "color": true,
         "patternMeasures": true,
-        "patternSteps": true
+        "patternSteps": true,
+        "projectile": true
       }
     },
     "obj-20": {
-      "name": "p_bullet",
+      "name": "p_projectile",
       "kind": "projectile",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 895,
-      "y": 726,
+      "x": 471,
+      "y": 566,
       "radius": 60,
-      "color": "#ffe08a",
+      "color": "#7bd88b",
       "bpm": 100,
       "pulseScale": 1.6,
       "relax": 0.16,
@@ -175,20 +179,20 @@
       "division": 1,
       "phaseOffset": 0,
       "timeSignature": "4/4",
-      "shape": "circle",
-      "fill": true,
+      "shape": "line",
+      "fill": false,
       "size": 6,
-      "speed": 1,
+      "speed": 0.8,
       "explodes": false,
       "aoeRadius": 90,
       "lifetime": 800,
-      "spinSpeed": 0,
-      "beatpulse": 0
+      "spinSpeed": -0.012,
+      "beatpulse": 0.35
     },
     "obj-21": {
-      "name": "p_projectile",
+      "name": "fat_sam",
       "kind": "projectile",
-      "isPrototype": true,
+      "isPrototype": false,
       "prototypeId": null,
       "x": 975,
       "y": 726,
@@ -212,15 +216,73 @@
       "aoeRadius": 90,
       "lifetime": 4000,
       "spinSpeed": 0,
-      "beatpulse": 0
+      "beatpulse": 0.45,
+      "overrides": {
+        "beatpulse": true
+      }
+    },
+    "obj-22": {
+      "name": "projectile",
+      "kind": "projectile",
+      "isPrototype": false,
+      "prototypeId": "obj-21",
+      "x": 875,
+      "y": 512,
+      "radius": 60,
+      "color": "#e3cad0",
+      "bpm": 100,
+      "pulseScale": 1.6,
+      "relax": 0.16,
+      "sound": "kick",
+      "behavior": "none",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "timeSignature": "4/4",
+      "shape": "triangle",
+      "fill": false,
+      "size": 12,
+      "speed": 0.3,
+      "explodes": true,
+      "aoeRadius": 90,
+      "lifetime": 4000,
+      "spinSpeed": -0.013,
+      "beatpulse": 0,
+      "overrides": {
+        "shape": true,
+        "fill": true,
+        "color": true,
+        "spinSpeed": true
+      }
+    },
+    "obj-23": {
+      "name": "blue_bomb",
+      "kind": "projectile",
+      "isPrototype": false,
+      "prototypeId": "obj-20",
+      "x": 1025,
+      "y": 538,
+      "color": "#5b8ee1",
+      "shape": "triangle",
+      "fill": false,
+      "speed": 0.65,
+      "spinSpeed": 0.006,
+      "overrides": {
+        "color": true,
+        "shape": true,
+        "fill": true,
+        "spinSpeed": true,
+        "speed": true
+      }
     },
     "obj-2": {
       "name": "p_spaceship",
       "kind": "ship",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 609,
-      "y": 675,
+      "x": 637,
+      "y": 771,
       "radius": 37,
       "color": "#cfc7e6",
       "bpm": 100,
@@ -234,24 +296,6 @@
       "phaseOffset": 0,
       "timeSignature": "4/4",
       "svg": "media/svg/spaceship.svg"
-    },
-    "obj-22": {
-      "name": "projectile",
-      "kind": "projectile",
-      "isPrototype": false,
-      "prototypeId": "obj-21",
-      "x": 875,
-      "y": 512,
-      "color": "#e3cad0",
-      "shape": "triangle",
-      "fill": false,
-      "spinSpeed": -0.013,
-      "overrides": {
-        "shape": true,
-        "fill": true,
-        "color": true,
-        "spinSpeed": true
-      }
     }
   },
   "retainedPrototypes": [
@@ -311,7 +355,7 @@
     },
     {
       "name": "p_downbeat gun",
-      "kind": "downbeatGun",
+      "kind": "downbeatLauncher",
       "isPrototype": true,
       "prototypeId": null,
       "x": 1066,

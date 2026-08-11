@@ -1,13 +1,13 @@
 /*
- * RtdSequencer — a bottom-docked step sequencer for a selected gun's trigger pattern.
+ * RtdSequencer — a bottom-docked step sequencer for a selected launcher's trigger pattern.
  *
  * Shows an N-measure phrase at eighth-note resolution (beatsPerBar * 2 cells per measure).
- * Click cells to toggle where the gun fires; pick the phrase length and projectile type.
+ * Click cells to toggle where the launcher fires; pick the phrase length and projectile type.
  * A playhead sweeps the phrase in time with the grid. Edits write straight to the object
  * (marking a per-instance override), like the rest of the RTD editor.
  *
  * Runs as a render system: it polls the current selection each frame (so it needs no
- * selection callback of its own), showing only when a quad gun is selected in a mode
+ * selection callback of its own), showing only when a quad launcher is selected in a mode
  * where you edit (objects / editor).
  */
 
@@ -99,7 +99,7 @@ export default class RtdSequencer {
   }
 
   _rebuild(o, measures, spb) {
-    this.titleEl.textContent = o.name || 'gun';
+    this.titleEl.textContent = o.name || 'launcher';
     this.measuresSel.value = String(measures);
     this._fillProjectiles(o);
     const phraseLen = measures * spb;
@@ -114,14 +114,14 @@ export default class RtdSequencer {
   }
 
   // Populate the "fires" dropdown with the scene's projectile prototypes, selecting the
-  // gun's attached one (kept selectable even if the projectile was since deleted).
+  // launcher's attached one (kept selectable even if the projectile was since deleted).
   _fillProjectiles(o) {
     const bare = (n) => (this.rtd._bareName ? this.rtd._bareName(n) : n);
     const names = (this.rtd.objects || [])
       .filter((p) => p.kind === 'projectile')
       .map((p) => bare(p.name))
       .filter((n, i, a) => n && a.indexOf(n) === i);
-    const cur = o.projectile || 'bullet';
+    const cur = o.projectile || 'projectile';
     if (cur && !names.includes(cur)) names.unshift(cur);
     this.projectileSel.innerHTML = names.length
       ? names.map((n) => `<option value="${n}" ${n === cur ? 'selected' : ''}>${n}</option>`).join('')

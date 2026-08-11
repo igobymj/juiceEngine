@@ -141,7 +141,7 @@ export default class RtdEditor {
     this._wireControls(o);
   }
 
-  // A projectile definition (kind 'projectile') — a template a gun fires. Appearance
+  // A projectile definition (kind 'projectile') — a template a launcher fires. Appearance
   // borrows the particle system (shape / fill / size / color); plus behaviour (speed,
   // explode-on-impact + AOE radius, lifetime) and animation (rotation spin, beat-pulse).
   _renderProjectile(o) {
@@ -207,14 +207,28 @@ export default class RtdEditor {
     $('[data-ctrl="isPrototype"]').addEventListener('change', (e) => { o.isPrototype = e.target.checked; this.manager.renameObject(o, o.name); this._refresh(); });
   }
 
-  // A quad gun is a free quadrilateral shaped by dragging its corner handles on the
-  // canvas (no size slider); every other kind is sized by radius. What a gun fires — and
+  // A quad launcher is a free quadrilateral shaped by dragging its corner handles on the
+  // canvas (no size slider); every other kind is sized by radius. What a launcher fires — and
   // when — lives in the sequencer strip (projectile dropdown + trigger pattern).
   _sizeHtml(o) {
     if (o.isQuad()) {
+      const attach = o.attachPoint || 'nose';
+      const attachOpts = ['nose', 'left', 'right']
+        .map((a) => `<option value="${a}" ${a === attach ? 'selected' : ''}>${a}</option>`).join('');
+      const life = o.lifespanPhrases ?? 4;
+      const lifeOpts = RtdEditor.LIFESPANS
+        .map((n) => `<option value="${n}" ${n === life ? 'selected' : ''}>${n}</option>`).join('');
       return `
         <p class="hint">Drag the corner handles on the canvas to shape it — each corner moves on its own.</p>
-        <button data-ctrl="recenter">recenter origin</button>`;
+        <button data-ctrl="recenter">recenter origin</button>
+        <label>
+          <span class="row" style="display:block; margin:8px 0 4px;">attaches to (ship zone)</span>
+          <select data-ctrl="attachPoint">${attachOpts}</select>
+        </label>
+        <label>
+          <span class="row" style="display:block; margin:8px 0 4px;">lifespan (phrases — side only; nose is ∞)</span>
+          <select data-ctrl="lifespanPhrases">${lifeOpts}</select>
+        </label>`;
     }
     const label = o.kind === 'ship' ? 'size' : 'radius';
     return `
@@ -226,7 +240,7 @@ export default class RtdEditor {
 
   // The metronome is the master clock, so it shows a tempo; a rhythm object shows its
   // subdivision (a rational multiple of the master beat) plus a phase offset, and locks
-  // to the grid the metronome sets. A quad gun shows neither: the step sequencer owns its
+  // to the grid the metronome sets. A quad launcher shows neither: the step sequencer owns its
   // timing (eighth-note granular), so subdivision/phase would only be a redundant control.
   _timingHtml(o) {
     if (o.isQuad()) return '';
@@ -345,6 +359,12 @@ export default class RtdEditor {
     const recenter = $('[data-ctrl="recenter"]');
     if (recenter) recenter.addEventListener('click', () => { o.recenterVerts(); });
 
+    const attachSel = $('[data-ctrl="attachPoint"]');
+    if (attachSel) attachSel.addEventListener('change', (e) => { o.attachPoint = e.target.value; override('attachPoint'); });
+
+    const lifeSel = $('[data-ctrl="lifespanPhrases"]');
+    if (lifeSel) lifeSel.addEventListener('change', (e) => { o.lifespanPhrases = parseInt(e.target.value, 10) || 1; override('lifespanPhrases'); });
+
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
     $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; override('sound'); this._previewSound(o); });
     $('[data-ctrl="behavior"]').addEventListener('change', (e) => { o.behavior = e.target.value; override('behavior'); });
@@ -372,6 +392,9 @@ RtdEditor.TIME_SIGNATURES = ['4/4', '3/4'];
 
 // Projectile shapes, borrowed from the particle system.
 RtdEditor.PROJECTILE_SHAPES = ['circle', 'square', 'triangle', 'line'];
+
+// Side-launcher lifespan choices, in the launcher's pattern-phrases.
+RtdEditor.LIFESPANS = [1, 2, 4, 8, 16];
 
 // Subdivision choices offered for non-metronome objects: pulses per master beat.
 RtdEditor.DIVISIONS = [

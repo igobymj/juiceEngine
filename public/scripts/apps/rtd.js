@@ -39,7 +39,7 @@ const FLAME_SVG = 'media/svg/shipFlame.svg';   // authored in the ship's viewBox
 const FLAME_OFFSET_Y = 25;   // extra downward nudge (ship-local units) below the nozzle
 const MODE_BAR_H = 40;   // height of the #rtd-tabs strip overlaying the canvas top
 
-// RTD's juice events, editable in editor mode. Firing 'bulletFire'/'asteroidHit'
+// RTD's juice events, editable in editor mode. Firing 'projectileFire'/'asteroidHit'
 // (see ProjectileManager / AsteroidManager) runs the event's active effects.
 // juiceFx is the master switch — on so events fire out of the box.
 const RTD_JUICE_DEFAULTS = {
@@ -48,8 +48,8 @@ const RTD_JUICE_DEFAULTS = {
   // Background music, surfaced in the EXTRAS fold (assigned in editor mode). The
   // track list is enumerated from media/music at load; see index.js.
   music: { track: 'none', volume: -12, play: false },
-  bulletFire: {
-    sound: { active: true, synth: 'bullet', clip: 'none', volume: -12, rate: 1 },
+  projectileFire: {
+    sound: { active: true, synth: 'projectile', clip: 'none', volume: -12, rate: 1 },
     shake: { active: false, xAxis: true, yAxis: true, amplitude: 0.25, frequency: 12, duration: 0.12, form: 'simple', fade: false, inheritVelocity: false },
   },
   // A debris particle burst + a screen shake + the explosion sound on the hit.
@@ -93,7 +93,7 @@ export function pointerGuard(x, y, gs) {
   if (y < MODE_BAR_H) return true;
   const rtd = gs.rtdManager;
   const mode = rtd && rtd.modes && rtd.modes.current;
-  // The sequencer strip (bottom, when a gun is selected) swallows its own clicks. x,y are
+  // The sequencer strip (bottom, when a launcher is selected) swallows its own clicks. x,y are
   // canvas-relative (the canvas sits below the tab bar), so convert to client coords via
   // the canvas offset before testing which element is actually under the pointer.
   const seq = document.getElementById('rtd-sequencer');
@@ -146,7 +146,7 @@ export default {
   background: '#141018',
 
   build(gs) {
-    // Define RTD's juice events (bulletFire, asteroidHit) and their particle
+    // Define RTD's juice events (projectileFire, asteroidHit) and their particle
     // systems, then overlay any persisted tweaks so saved values win.
     gs.juiceSettings.extend(RTD_JUICE_DEFAULTS);
     gs.juiceSettings.extendParticleSystems(RTD_PARTICLE_SYSTEMS);
@@ -186,8 +186,8 @@ export default {
     gs.gameLoop.addRenderSystem('rtd-stars', starfield, 20);
 
     // Sounds are registered by name so the juice 'sound' effector can play them
-    // (see RTD_JUICE_DEFAULTS: bulletFire → 'bullet', asteroidHit → 'explosion').
-    gs.soundManager.registerSound('bullet', new RtdBulletSound(gs));
+    // (see RTD_JUICE_DEFAULTS: projectileFire → 'projectile', asteroidHit → 'explosion').
+    gs.soundManager.registerSound('projectile', new RtdBulletSound(gs));
     gs.soundManager.registerSound('explosion', new RtdExplosionSound(gs));
 
     // Background music player on the music channel (shares the master mute and
@@ -205,16 +205,16 @@ export default {
     gs.gameLoop.addUpdateSystem('rtd-music-loop', rtd.__musicLoop, 5);
 
     // Asteroids: drift, despawn off-screen, respawn when the field is cleared.
-    // Bullets ask asteroidManager.collide(); a hit fires the asteroidHit event.
+    // Projectiles ask asteroidManager.collide(); a hit fires the asteroidHit event.
     const asteroids = new AsteroidManager(gs, { event: 'asteroidHit' });
     gs.registerManager('asteroidManager', asteroids);
     gs.gameLoop.addUpdateSystem('rtd-asteroids', asteroids, 30);
     gs.gameLoop.addRenderSystem('rtd-asteroids', asteroids, 30);
 
-    // Projectiles (RTD's own Bullet). Each shot fires the bulletFire event.
-    const projectiles = new ProjectileManager(gs, { event: 'bulletFire' });
-    gs.gameLoop.addUpdateSystem('rtd-bullets', projectiles, 40);
-    gs.gameLoop.addRenderSystem('rtd-bullets', projectiles, 40);
+    // Projectiles (RTD's own Projectile). Each shot fires the projectileFire event.
+    const projectiles = new ProjectileManager(gs, { event: 'projectileFire' });
+    gs.gameLoop.addUpdateSystem('rtd-projectiles', projectiles, 40);
+    gs.gameLoop.addRenderSystem('rtd-projectiles', projectiles, 40);
     gs.registerManager('rtdProjectiles', projectiles);   // so object behaviours can fire (behaviors.js)
 
     // Perf overlay (toggle with the ` backtick key): FPS, frame time, live counts.
@@ -222,7 +222,7 @@ export default {
     const perf = new PerfOverlay(gs, () => ({
       objects: rtd.objects.length,
       asteroids: asteroids.asteroids.length,
-      bullets: projectiles.bullets.length,
+      projectiles: projectiles.projectiles.length,
     }));
     gs.gameLoop.addRenderSystem('rtd-perf', perf, 999);
     gs.inputManager.addKeyHandler((key, code) => { if (code === 'Backquote') perf.toggle(); });
@@ -232,12 +232,12 @@ export default {
     // only in game mode (CSS, via the body.mode-game class); mirrors the editor control.
     gs.gameLoop.addRenderSystem('rtd-phase-ui', makePhaseSlider(gs, rtd), 998);
 
-    // Gun-trigger step sequencer (bottom strip): edits the selected quad gun's N-measure,
+    // Launcher-trigger step sequencer (bottom strip): edits the selected quad launcher's N-measure,
     // eighth-note trigger pattern, phrase length and projectile type, with a live playhead.
     gs.gameLoop.addRenderSystem('rtd-sequencer', new RtdSequencer(rtd, gs), 997);
 
     // Three modes (like primitives): 'objects' edits/selects via the object editor;
-    // 'game' is the play scene (starfield, ship, asteroids, bullets); 'editor' is
+    // 'game' is the play scene (starfield, ship, asteroids, projectiles); 'editor' is
     // the same scene with the shared juice/sounds/extras panel mounted over it. The
     // gameplay systems are mode-gated so they run only in game/editor.
     const modes = new ModeManager(gs);
@@ -289,9 +289,9 @@ export default {
       rtd.restoreRetainedPrototypes(saved.retainedPrototypes);   // templates of deleted prototypes
       ensureMetronomePrototype(gs, rtd);   // always offered in the editor's prototype dropdown
       ensureDrumKickPrototype(gs, rtd);
-      ensureProjectilePrototypes(gs, rtd);   // before the guns, which reference them by name
-      ensureDownbeatGunPrototype(gs, rtd);
-      ensureFourMeasureGunPrototype(gs, rtd);
+      ensureProjectilePrototypes(gs, rtd);   // before the launchers, which reference them by name
+      ensureDownbeatLauncherPrototype(gs, rtd);
+      ensureFourMeasureLauncherPrototype(gs, rtd);
     };
     if (gs.canvasWidth > 0) {
       initScene();
@@ -330,7 +330,7 @@ function tryDropMusic(gs, rtd) {
   if (Math.min(phase, interval - phase) > RTD_BEAT_WINDOW_MS) return;    // off the beat — no drop
   rtd.__musicDropped = true;
   // The music lands on the nearest beat (see musicSnapOpts); make that beat measure 1's
-  // downbeat so measures — and the four-measure gun — count from the drop.
+  // downbeat so measures — and the four-measure launcher — count from the drop.
   rtd.anchorMeasures(grid.epoch + Math.round((t - grid.epoch) / interval) * interval);
   // Start snapped to the beat. Pass a function so the snap is (re)computed against the
   // grid at the instant playback actually begins — correct even if the track was still
@@ -476,14 +476,14 @@ function ensureDrumKickPrototype(gs, rtd) {
   });
 }
 
-// Guarantee the downbeatGun prototype exists — a rectangle that pulses on the grid.
+// Guarantee the downbeatLauncher prototype exists — a rectangle that pulses on the grid.
 // Color and size (the "size" slider) are tuned in the object editor. Silent by default
 // (sound 'none'); seeded like the others so it's always offered in the create dropdown.
-function ensureDownbeatGunPrototype(gs, rtd) {
-  if (rtd.prototypes.some((o) => o.kind === 'downbeatGun') || rtd.hasRetainedKind('downbeatGun')) return;
+function ensureDownbeatLauncherPrototype(gs, rtd) {
+  if (rtd.prototypes.some((o) => o.kind === 'downbeatLauncher') || rtd.hasRetainedKind('downbeatLauncher')) return;
   rtd.createObject({
-    name: 'downbeat gun',
-    kind: 'downbeatGun',
+    name: 'downbeat launcher',
+    kind: 'downbeatLauncher',
     isPrototype: true,
     collection: 'objects',
     select: false,
@@ -494,14 +494,14 @@ function ensureDownbeatGunPrototype(gs, rtd) {
   });
 }
 
-// Guarantee the four-measure-gun prototype exists — a quad gun (edited like the downbeat
-// gun) that fires a slow, large AOE shell on the downbeat of every 4th measure. Shell
-// velocity and AOE radius are tuned in the object editor. Silent by default.
-function ensureFourMeasureGunPrototype(gs, rtd) {
-  if (rtd.prototypes.some((o) => o.kind === 'fourMeasureGun') || rtd.hasRetainedKind('fourMeasureGun')) return;
+// Guarantee the four-measure-launcher prototype exists — a quad launcher (edited like the
+// downbeat launcher) that fires the slow, exploding 'burst' projectile on the downbeat of
+// every 4th measure. The projectile's velocity and AOE radius are tuned on the projectile.
+function ensureFourMeasureLauncherPrototype(gs, rtd) {
+  if (rtd.prototypes.some((o) => o.kind === 'fourMeasureLauncher') || rtd.hasRetainedKind('fourMeasureLauncher')) return;
   rtd.createObject({
-    name: 'four measure gun',
-    kind: 'fourMeasureGun',
+    name: 'four measure launcher',
+    kind: 'fourMeasureLauncher',
     isPrototype: true,
     collection: 'objects',
     select: false,
@@ -512,19 +512,19 @@ function ensureFourMeasureGunPrototype(gs, rtd) {
   });
 }
 
-// Guarantee the built-in projectile presets exist — the definitions guns fire and the
-// user extends. 'bullet' (fast, small, no AOE) and 'projectile' (slow, large, explodes)
-// match the old hardcoded types, so guns referencing them by name keep firing as before.
+// Guarantee the built-in projectile presets exist — the definitions launchers fire and the
+// user extends. 'projectile' (fast, small, no AOE) and 'burst' (slow, large, explodes)
+// match the old hardcoded types, so launchers referencing them by name keep firing as before.
 function ensureProjectilePrototypes(gs, rtd) {
   if (rtd.prototypes.some((o) => o.kind === 'projectile') || rtd.hasRetainedKind('projectile')) return;
   const y = gs.canvasHeight / 2 + 200;
   rtd.createObject({
-    name: 'bullet', kind: 'projectile', isPrototype: true, collection: 'objects', select: false,
+    name: 'projectile', kind: 'projectile', isPrototype: true, collection: 'objects', select: false,
     x: gs.canvasWidth / 2 - 40, y,
     shape: 'circle', fill: true, size: 6, color: '#ffe08a', speed: 1.0, explodes: false, lifetime: 800,
   });
   rtd.createObject({
-    name: 'projectile', kind: 'projectile', isPrototype: true, collection: 'objects', select: false,
+    name: 'burst', kind: 'projectile', isPrototype: true, collection: 'objects', select: false,
     x: gs.canvasWidth / 2 + 40, y,
     shape: 'circle', fill: true, size: 12, color: '#e0567b', speed: 0.3, explodes: true, aoeRadius: 90, lifetime: 4000,
   });
