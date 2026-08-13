@@ -1,5 +1,5 @@
 /*
- * RtdSequencer — a bottom-docked step sequencer for a selected launcher's trigger pattern.
+ * RhythmSpaceSequencer — a bottom-docked step sequencer for a selected launcher's trigger pattern.
  *
  * Shows an N-measure phrase at eighth-note resolution (beatsPerBar * 2 cells per measure).
  * Click cells to toggle where the launcher fires; pick the phrase length and projectile type.
@@ -11,7 +11,7 @@
  * where you edit (objects / editor).
  */
 
-export default class RtdSequencer {
+export default class RhythmSpaceSequencer {
   constructor(rtdManager, gameSession) {
     this.rtd = rtdManager;
     this.gs = gameSession;

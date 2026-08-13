@@ -26,7 +26,7 @@ import DefaultExplosion from "./engine/sounds/DefaultExplosion.js";
 import { registerToneSynths } from "./engine/sounds/toneSynths.js";
 import primitivesApp, { setSavedJuice as setPrimJuice, pointerGuard as primPointerGuard } from "./apps/primitives.js";
 import asteroidsApp, { setSavedJuice as setAstJuice, extraApply as astExtraApply } from "./apps/asteroids.js";
-import rtdApp, { setSavedState as setRtdState, setSavedJuice as setRtdJuice, pointerGuard as rtdPointerGuard, extraApply as rtdExtraApply } from "./apps/rtd.js";
+import rtdApp, { setSavedState as setRtdState, setSavedJuice as setRtdJuice, pointerGuard as rtdPointerGuard, extraApply as rtdExtraApply } from "./apps/rhythmSpace.js";
 import RtdEditor from "./editor/RtdEditor.js";
 import { loadSvg, normalizeShapes, svgToVectorObjects } from "./engine/loaders/SvgImport.js";
 

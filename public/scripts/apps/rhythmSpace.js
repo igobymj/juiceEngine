@@ -20,16 +20,16 @@
  * prototype on load, so a saved instance can never drift from it (RtdManager.serialize).
  */
 
-import RtdManager from "../game/rtd/RtdManager.js";
-import PulseObject from "../game/rtd/PulseObject.js";
-import Starfield from "../game/rtd/Starfield.js";
-import ProjectileManager from "../game/rtd/ProjectileManager.js";
-import RtdBulletSound from "../game/rtd/RtdBulletSound.js";
-import AsteroidManager from "../game/rtd/AsteroidManager.js";
-import RtdExplosionSound from "../game/rtd/RtdExplosionSound.js";
+import RtdManager from "../game/rhythmSpace/RtdManager.js";
+import PulseObject from "../game/rhythmSpace/PulseObject.js";
+import Starfield from "../game/rhythmSpace/Starfield.js";
+import ProjectileManager from "../game/rhythmSpace/ProjectileManager.js";
+import RtdBulletSound from "../game/rhythmSpace/RtdBulletSound.js";
+import AsteroidManager from "../game/rhythmSpace/AsteroidManager.js";
+import RtdExplosionSound from "../game/rhythmSpace/RtdExplosionSound.js";
 import ModeManager from "../engine/ModeManager.js";
 import PerfOverlay from "../engine/PerfOverlay.js";
-import RtdSequencer from "../editor/RtdSequencer.js";
+import RhythmSpaceSequencer from "../editor/RhythmSpaceSequencer.js";
 import MusicPlayer from "../engine/sounds/MusicPlayer.js";
 import { registerToneSynths } from "../engine/sounds/toneSynths.js";
 import { loadSvg, normalizeShapes, svgToVectorObjects } from "../engine/loaders/SvgImport.js";
@@ -142,7 +142,7 @@ export default {
       },
     },
   },
-  title: 'RTD',
+  title: 'Rhythm Space',
   background: '#141018',
 
   build(gs) {
@@ -171,10 +171,8 @@ export default {
       mouseReleased: () => rtd.mouseReleased(),
     });
 
-    // Delete/Backspace removes the selected object while editing (objects/editor).
-    gs.inputManager.addKeyHandler((key) => {
-      if ((key === 'Delete' || key === 'Backspace') && rtd.interactive) rtd.deleteSelected();
-    });
+    // Objects are removed only via the editor's "delete object" button — no Delete/Backspace
+    // shortcut, so pressing those keys while editing a text field can't delete the object.
 
     // How the manager turns a record into a live object (ships need async import).
     rtd.instantiate = (rec) => createFromRecord(gs, rtd, rec);
@@ -234,7 +232,7 @@ export default {
 
     // Launcher-trigger step sequencer (bottom strip): edits the selected quad launcher's N-measure,
     // eighth-note trigger pattern, phrase length and projectile type, with a live playhead.
-    gs.gameLoop.addRenderSystem('rtd-sequencer', new RtdSequencer(rtd, gs), 997);
+    gs.gameLoop.addRenderSystem('rtd-sequencer', new RhythmSpaceSequencer(rtd, gs), 997);
 
     // Three modes (like primitives): 'objects' edits/selects via the object editor;
     // 'game' is the play scene (starfield, ship, asteroids, projectiles); 'editor' is

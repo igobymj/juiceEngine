@@ -170,13 +170,21 @@ export default class RtdManager extends Manager {
     }
     for (const o of this.__objects) {
       if (!o.isQuad() || o.__attachedShip || o.__expired) continue;   // consumed launchers stay gone
-      const slot = PulseObject.ATTACH_SLOT[o.attachPoint] ?? 0;   // its designated point
-      if (occupied.has(slot)) continue;                           // that point is already taken
-      if (!this._zoneTouchesLauncher(points[slot], zoneR, o)) continue;   // wrong part of the ship
+      // Among the launcher's candidate grab points (one for nose/left/right, both sides for
+      // 'either'), take the nearest that's free AND whose zone overlaps the launcher.
+      const candidates = PulseObject.ATTACH_CANDIDATES[o.attachPoint] || [0];
+      let best = -1, bestD = Infinity;
+      for (const slot of candidates) {
+        if (occupied.has(slot)) continue;
+        if (!this._zoneTouchesLauncher(points[slot], zoneR, o)) continue;
+        const d = Math.hypot(points[slot].x - o.x, points[slot].y - o.y);
+        if (d < bestD) { bestD = d; best = slot; }
+      }
+      if (best < 0) continue;
       o.__attachedShip = ship;
-      o.__attachSlot = slot;
+      o.__attachSlot = best;
       o.__attachTime = this.gameSession.timeManager.realTimeSinceStartup;   // start the lifespan clock
-      occupied.add(slot);
+      occupied.add(best);
     }
   }
 
@@ -374,9 +382,12 @@ export default class RtdManager extends Manager {
   // this per-object check is what tells them apart.
   _hiddenInGame(o) {
     if (!this.modes || this.modes.current !== 'game') return false;
-    // Metronome (beat reference) and projectile (a fired-from definition, not a placed
-    // object) are design-space only. A consumed launcher (lifespan spent) is gone too.
-    return o.kind === 'metronome' || o.kind === 'projectile' || o.__expired;
+    // Design-space only in real play: prototypes (templates — only placed instances are
+    // gameplay objects), the metronome (beat reference), and projectile definitions (a
+    // fired-from template). A consumed launcher (lifespan spent) is gone too, and a "spawn
+    // at launch" object stays hidden until the music has dropped (the launch).
+    return o.isPrototype || o.kind === 'metronome' || o.kind === 'projectile' || o.__expired
+      || (o.spawnAtLaunch && !this.__musicDropped);
   }
 
   update() {
@@ -404,6 +415,17 @@ export default class RtdManager extends Manager {
 
   _findMaster() {
     return this.__objects.find((o) => o.kind === 'metronome') || null;
+  }
+
+  // Change an object's high-level type (from the editor's type dropdown), updating its kind
+  // to the type's canonical kind so rendering/behaviour follow. A launcher keeps its current
+  // launcher kind (preserving a four-measure preset); everything else takes the canonical
+  // kind. Kind-specific fields already exist on every PulseObject (defaults), so no re-init.
+  convertType(o, type) {
+    o.type = type;
+    if (type === 'launcher') { if (!o.isQuad()) o.kind = 'downbeatLauncher'; }
+    else o.kind = PulseObject.TYPE_KIND[type] || type;
+    this._markDirty();
   }
 
   // Resolve a launcher's attached projectile (referenced by its bare, prefix-free name) to a
@@ -495,7 +517,7 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 
 // Properties an instance inherits from its prototype (the editor-editable ones).
 // Identity/placement (name, position, isPrototype) stay per-instance.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectile', 'patternMeasures', 'patternSteps', 'attachPoint', 'lifespanPhrases', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'spawnAtLaunch', 'projectile', 'patternMeasures', 'patternSteps', 'attachPoint', 'lifespanPhrases', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
 
 // Beats per bar from an "n/d" time-signature string (the numerator); 4 by default.
 RtdManager.beatsPerBar = (sig) => {

@@ -37,6 +37,11 @@ export default class PulseObject {
     // (a circle shown only in the editor — see RtdManager), 'drumKick' (a circle synth
     // drum) or 'downbeatLauncher' (a rectangle). Ship and metronome share the ship defaults.
     this.kind = PulseObject.MIGRATE_KIND[opts.kind] || opts.kind || 'circle';
+    // The object's high-level type (launcher | projectile | metronome | ship | target |
+    // pickup | obstacle | trigger). Set/changed via the editor's type dropdown, which also
+    // updates `kind`. Derived from kind for objects saved before the type field existed.
+    // ('drum' — the old kick-circle/drumKick sound objects — is deprecated but still loads.)
+    this.type = opts.type ?? PulseObject.KIND_TYPE[this.kind] ?? this.kind;
     const shipLike = this.kind === 'ship' || this.kind === 'metronome';
     this.label = opts.label ?? (this.kind === 'ship' ? 'spaceship' : this.kind === 'metronome' ? 'metronome' : this.kind === 'drumKick' ? 'drum kick' : this.kind === 'downbeatLauncher' ? 'downbeat launcher' : this.kind === 'fourMeasureLauncher' ? 'four measure launcher' : 'kick-circle');
     this.shapes = opts.shapes ?? null;   // VectorGameObject[] — required for kind 'ship'
@@ -52,7 +57,7 @@ export default class PulseObject {
     // artwork at its imported size, and it drives the hit test + selection ring.
     // A metronome takes the ship's defaults but uses radius as a plain circle radius.
     this.radius = opts.radius ?? (shipLike ? PulseObject.SHIP_REF_RADIUS : 60);
-    this.color = opts.color ?? (shipLike ? '#cfc7e6' : this.kind === 'drumKick' ? '#e6a15c' : this.kind === 'downbeatLauncher' ? '#7bd88b' : this.kind === 'fourMeasureLauncher' ? '#e0567b' : '#8b7bd8');
+    this.color = opts.color ?? (shipLike ? '#cfc7e6' : PulseObject.KIND_COLOR[this.kind] ?? '#8b7bd8');
     // A downbeatLauncher is an arbitrary quadrilateral: four corner vertices as offsets from
     // the object's (x,y), each independently draggable by its handle. Defaults to a
     // rectangle (and migrates an older width/height launcher to rect verts). Per-object like
@@ -110,6 +115,9 @@ export default class PulseObject {
     // of every bar. Stored as an "n/d" string; only the numerator (beats per bar) is
     // used for now. Published to the grid by RtdManager._publishGrid.
     this.timeSignature = opts.timeSignature ?? '4/4';
+    // When true, this object appears in GAME mode only after the music launches (the beat
+    // drop); before launch it's hidden and inert. Editor mode ignores it (always present).
+    this.spawnAtLaunch = opts.spawnAtLaunch ?? false;
 
     // --- runtime state ---
     this.__scale = 1;
@@ -214,7 +222,7 @@ export default class PulseObject {
   // and never expires.
   _tickLifespan(t) {
     if (this.__expired) return;
-    if (!this.__attachedShip || !this.isQuad() || this.attachPoint === 'nose') { this.__alpha = 1; return; }
+    if (!this.__attachedShip || !this.isQuad() || this.__attachSlot === 0) { this.__alpha = 1; return; }   // slot 0 = nose = infinite
     const grid = this._grid();
     const phraseMs = Math.max(1, this.patternMeasures) * this._stepsPerBar() * (grid.masterInterval / 2);
     const lifeMs = Math.max(1, this.lifespanPhrases) * phraseMs;
@@ -529,6 +537,7 @@ export default class PulseObject {
     const s = {
       name: this.name,
       kind: this.kind,
+      type: this.type,
       isPrototype: this.isPrototype,
       prototypeId: this.prototypeId,
       x: this.x,
@@ -545,6 +554,7 @@ export default class PulseObject {
       division: this.division,
       phaseOffset: this.phaseOffset,
       timeSignature: this.timeSignature,
+      spawnAtLaunch: this.spawnAtLaunch,
     };
     if (this.kind === 'ship' && this.svg) s.svg = this.svg;
     if (this.isQuad()) {
@@ -616,8 +626,9 @@ PulseObject.SHIP_ATTACH_POINTS = [
   { x: 0.55,  y: 0.55 },    // right fin
 ];
 
-// Named grab points → index into SHIP_ATTACH_POINTS (a launcher's chosen attach point).
-PulseObject.ATTACH_SLOT = { nose: 0, left: 1, right: 2 };
+// A launcher's attach choice → the ship grab points it may bind to (indices into
+// SHIP_ATTACH_POINTS). 'either' takes whichever side (left/right) it touches and is free.
+PulseObject.ATTACH_CANDIDATES = { nose: [0], left: [1], right: [2], either: [1, 2] };
 
 // Collection zone radius around each grab point, as a fraction of the ship's radius: a
 // launcher is collected only when its chosen zone overlaps the launcher (not any overlap).
@@ -635,6 +646,23 @@ PulseObject.shipAttachPoints = (ship) => {
 
 // Migrate legacy kind names loaded from older saved scenes to the current launcher kinds.
 PulseObject.MIGRATE_KIND = { downbeatGun: 'downbeatLauncher', fourMeasureGun: 'fourMeasureLauncher' };
+
+// kind → high-level type, and a type → its canonical kind (for the editor's type dropdown,
+// which converts an object between types). 'drum' is deprecated (kick-circle/drumKick).
+PulseObject.KIND_TYPE = {
+  downbeatLauncher: 'launcher', fourMeasureLauncher: 'launcher', projectile: 'projectile',
+  metronome: 'metronome', ship: 'ship', circle: 'drum', drumKick: 'drum',
+};
+PulseObject.TYPE_KIND = {
+  launcher: 'downbeatLauncher', projectile: 'projectile', metronome: 'metronome', ship: 'ship',
+  target: 'target', pickup: 'pickup', obstacle: 'obstacle', trigger: 'trigger',
+};
+
+// Default fill per kind (ship/metronome use the ship colour). New stub types get their own.
+PulseObject.KIND_COLOR = {
+  drumKick: '#e6a15c', downbeatLauncher: '#7bd88b', fourMeasureLauncher: '#e0567b',
+  target: '#e05a5a', pickup: '#5ad0a0', obstacle: '#9a8a5a', trigger: '#c08ae0',
+};
 
 // Rectangle as four corner-vertex offsets (from centre), the default downbeatLauncher shape.
 PulseObject.rectVerts = (w, h) => {

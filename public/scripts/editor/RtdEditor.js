@@ -12,8 +12,6 @@
  * `options.soundNames()` supplies the sound dropdown choices.
  */
 
-import { behaviorOptions } from "../game/rtd/behaviors.js";
-
 export default class RtdEditor {
   constructor(rtdManager, panelEl, options = {}) {
     this.manager = rtdManager;
@@ -53,7 +51,7 @@ export default class RtdEditor {
       : `<p class="hint">No prototypes yet. Mark an object as a prototype to create new objects from it.</p>`;
 
     return `
-      <h2>RTD</h2>
+      <h2>Rhythm Space</h2>
       ${createHtml}
       ${saveHtml}
     `;
@@ -81,11 +79,12 @@ export default class RtdEditor {
       + this.soundNames()
         .map((n) => `<option value="${n}" ${n === o.sound ? 'selected' : ''}>${n}</option>`)
         .join('');
-    // Behaviours (fire-on-downbeat, …) attach from a library, like sounds.
-    const curBehavior = o.behavior || 'none';
-    const behaviorOpts = behaviorOptions()
-      .map((b) => `<option value="${b.value}" ${b.value === curBehavior ? 'selected' : ''}>${this._esc(b.label)}</option>`)
-      .join('');
+    // Type: the object's high-level role (converts kind on change). A legacy/deprecated
+    // value (e.g. 'drum') is shown selected but the offered list is the current taxonomy.
+    const curType = o.type || 'launcher';
+    const typeList = RtdEditor.TYPES.includes(curType) ? RtdEditor.TYPES : [curType, ...RtdEditor.TYPES];
+    const typeOpts = typeList
+      .map((t) => `<option value="${t}" ${t === curType ? 'selected' : ''}>${t}</option>`).join('');
     this.panelEl.innerHTML = `
       ${this._headerHtml()}
 
@@ -96,9 +95,19 @@ export default class RtdEditor {
         <input type="text" value="${this._esc(o.name ?? '')}" data-ctrl="name">
       </label>
 
+      <label>
+        <span class="row" style="display:block; margin-bottom:4px;">type</span>
+        <select data-ctrl="type">${typeOpts}</select>
+      </label>
+
       <label class="checkbox">
         <input type="checkbox" data-ctrl="isPrototype" ${o.isPrototype ? 'checked' : ''}>
         prototype (template for new objects)
+      </label>
+
+      <label class="checkbox">
+        <input type="checkbox" data-ctrl="spawnAtLaunch" ${o.spawnAtLaunch ? 'checked' : ''}>
+        spawn at launch (game mode only)
       </label>
 
       ${this._sizeHtml(o)}
@@ -130,11 +139,6 @@ export default class RtdEditor {
         <select data-ctrl="sound">${soundOpts}</select>
       </label>
 
-      <label>
-        <span class="row" style="display:block; margin-bottom:4px;">behavior</span>
-        <select data-ctrl="behavior">${behaviorOpts}</select>
-      </label>
-
       <button data-ctrl="delete" class="danger">delete object</button>
     `;
     this._wireHeader();
@@ -147,11 +151,16 @@ export default class RtdEditor {
   _renderProjectile(o) {
     const shapeOpts = RtdEditor.PROJECTILE_SHAPES
       .map((s) => `<option value="${s}" ${s === (o.shape || 'circle') ? 'selected' : ''}>${s}</option>`).join('');
+    const curType = o.type || 'projectile';
+    const typeList = RtdEditor.TYPES.includes(curType) ? RtdEditor.TYPES : [curType, ...RtdEditor.TYPES];
+    const typeOpts = typeList.map((t) => `<option value="${t}" ${t === curType ? 'selected' : ''}>${t}</option>`).join('');
     this.panelEl.innerHTML = `
       ${this._headerHtml()}
       <h3>${this._esc(o.name ?? 'projectile')}</h3>
       <label><span class="row" style="display:block; margin-bottom:4px;">name</span>
         <input type="text" value="${this._esc(o.name ?? '')}" data-ctrl="name"></label>
+      <label><span class="row" style="display:block; margin-bottom:4px;">type</span>
+        <select data-ctrl="type">${typeOpts}</select></label>
       <label class="checkbox"><input type="checkbox" data-ctrl="isPrototype" ${o.isPrototype ? 'checked' : ''}> prototype (template for new objects)</label>
 
       <label><span class="row" style="display:block; margin-bottom:4px;">shape</span>
@@ -198,6 +207,7 @@ export default class RtdEditor {
     slider('lifetime', 'lifetime', (v) => `${v.toFixed(0)} ms`);
     slider('spinSpeed', 'spinSpeed', (v) => v.toFixed(3));
     slider('beatpulse', 'beatpulse', (v) => v.toFixed(2));
+    $('[data-ctrl="type"]').addEventListener('change', (e) => { this.manager.convertType(o, e.target.value); this._refresh(); });
     $('[data-ctrl="shape"]').addEventListener('change', (e) => { o.shape = e.target.value; override('shape'); });
     $('[data-ctrl="fill"]').addEventListener('change', (e) => { o.fill = e.target.checked; override('fill'); });
     $('[data-ctrl="explodes"]').addEventListener('change', (e) => { o.explodes = e.target.checked; override('explodes'); });
@@ -213,8 +223,8 @@ export default class RtdEditor {
   _sizeHtml(o) {
     if (o.isQuad()) {
       const attach = o.attachPoint || 'nose';
-      const attachOpts = ['nose', 'left', 'right']
-        .map((a) => `<option value="${a}" ${a === attach ? 'selected' : ''}>${a}</option>`).join('');
+      const attachOpts = [['nose', 'nose'], ['left', 'left'], ['right', 'right'], ['either', 'left/right']]
+        .map(([v, l]) => `<option value="${v}" ${v === attach ? 'selected' : ''}>${l}</option>`).join('');
       const life = o.lifespanPhrases ?? 4;
       const lifeOpts = RtdEditor.LIFESPANS
         .map((n) => `<option value="${n}" ${n === life ? 'selected' : ''}>${n}</option>`).join('');
@@ -367,7 +377,9 @@ export default class RtdEditor {
 
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
     $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; override('sound'); this._previewSound(o); });
-    $('[data-ctrl="behavior"]').addEventListener('change', (e) => { o.behavior = e.target.value; override('behavior'); });
+    $('[data-ctrl="type"]').addEventListener('change', (e) => { this.manager.convertType(o, e.target.value); this._refresh(); });
+    const spawnEl = $('[data-ctrl="spawnAtLaunch"]');
+    if (spawnEl) spawnEl.addEventListener('change', (e) => { o.spawnAtLaunch = e.target.checked; override('spawnAtLaunch'); });
     $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
 
     // Name is kept unique by the manager; re-render so the field reflects any
@@ -395,6 +407,9 @@ RtdEditor.PROJECTILE_SHAPES = ['circle', 'square', 'triangle', 'line'];
 
 // Side-launcher lifespan choices, in the launcher's pattern-phrases.
 RtdEditor.LIFESPANS = [1, 2, 4, 8, 16];
+
+// Object types offered in the editor's type dropdown ('drum' is deprecated, not listed).
+RtdEditor.TYPES = ['launcher', 'projectile', 'metronome', 'ship', 'target', 'pickup', 'obstacle', 'trigger'];
 
 // Subdivision choices offered for non-metronome objects: pulses per master beat.
 RtdEditor.DIVISIONS = [
