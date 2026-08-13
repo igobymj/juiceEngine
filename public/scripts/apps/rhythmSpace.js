@@ -38,6 +38,7 @@ const SHIP_SVG = 'media/svg/spaceship.svg';
 const FLAME_SVG = 'media/svg/shipFlame.svg';   // authored in the ship's viewBox, below the nozzle
 const FLAME_OFFSET_Y = 25;   // extra downward nudge (ship-local units) below the nozzle
 const MODE_BAR_H = 40;   // height of the #rtd-tabs strip overlaying the canvas top
+const SCENE_BAR_H = 34;  // height of the #rtd-scene-tabs strip (editor mode only), just below it
 
 // RTD's juice events, editable in editor mode. Firing 'projectileFire'/'asteroidHit'
 // (see ProjectileManager / AsteroidManager) runs the event's active effects.
@@ -80,7 +81,7 @@ const RTD_PARTICLE_SYSTEMS = {
   },
 };
 
-let savedState = null;   // persisted scene ({ objects: {…}, retainedPrototypes: [] }), loaded before build
+let savedState = null;   // persisted state ({ prototypes, retainedPrototypes, scenes, activeScene }; legacy: { objects }), loaded before build
 export function setSavedState(data) { savedState = data; }
 
 let savedJuice = null;   // persisted juice/sounds/extras (editor mode), loaded before build
@@ -93,6 +94,8 @@ export function pointerGuard(x, y, gs) {
   if (y < MODE_BAR_H) return true;
   const rtd = gs.rtdManager;
   const mode = rtd && rtd.modes && rtd.modes.current;
+  // The scene-tab strip overlays the canvas top in editor mode — drop clicks that land on it.
+  if (mode === 'editor' && y < MODE_BAR_H + SCENE_BAR_H) return true;
   // The sequencer strip (bottom, when a launcher is selected) swallows its own clicks. x,y are
   // canvas-relative (the canvas sits below the tab bar), so convert to client coords via
   // the canvas offset before testing which element is actually under the pointer.
@@ -248,8 +251,15 @@ export default {
     const startAsteroids = () => { asteroids.start(); if (asteroids.asteroids.length === 0) asteroids.levelStart(); };
     const playScene = () => { rtd.setMode('game'); ensureGameShip(gs, rtd); startAsteroids(); };
     // Game mode arms the music drop: the round starts silent (just the beat), and the
-    // player drops the track in by hitting FIRE on the beat (see tryDropMusic).
-    const enterGame = () => { playScene(); armMusicDrop(gs, rtd); };
+    // player drops the track in by hitting FIRE on the beat (see tryDropMusic). Scenes play
+    // in their play-order sequence, so that order must be unique — a collision throws here;
+    // we surface it and bounce back to editor mode (where play order is set) rather than
+    // entering a broken game.
+    const enterGame = () => {
+      try { rtd.assertUniquePlayOrder(); }
+      catch (err) { window.alert(err && err.message ? err.message : String(err)); modes.set('editor'); return; }
+      playScene(); armMusicDrop(gs, rtd);
+    };
     // Editor tunes the single authored scene (same objects as every mode) with the
     // gameplay running: interactive (select/drag), systems on, juice/extras panel
     // mounted (see index.js). Firing works here too; the extras 'play' toggle controls
@@ -276,20 +286,34 @@ export default {
     // dimensions in that case.
     const initScene = () => {
       const saved = savedState || {};
-      const savedObjects = saved.objects || {};
-      if (Object.keys(savedObjects).length) {
-        for (const [id, rec] of Object.entries(savedObjects)) createFromRecord(gs, rtd, { ...rec, id, select: false });
+      const { prototypes, scenes, activeScene } = normalizeSaved(saved);
+      const hasContent = Object.keys(prototypes).length
+        || scenes.some((s) => Object.keys(s.objects || {}).length);
+
+      rtd.initScenes(scenes.map((s) => ({ id: s.id, name: s.name, playOrder: s.playOrder })), activeScene);
+
+      if (hasContent) {
+        // Global prototypes first (every scene references them), then the active scene's
+        // instances live; inactive scenes are parked as records until their tab is opened.
+        for (const [id, rec] of Object.entries(prototypes)) createFromRecord(gs, rtd, { ...rec, id, select: false });
+        for (const s of scenes) {
+          const objs = s.objects || {};
+          if (s.id === activeScene) {
+            for (const [id, rec] of Object.entries(objs)) createFromRecord(gs, rtd, { ...rec, id, select: false });
+          } else {
+            rtd.parkSceneRecords(s.id, Object.entries(objs).map(([id, rec]) => ({ ...rec, id })));
+          }
+        }
       } else {
-        buildDefaultScene(gs, rtd);
+        buildDefaultScene(gs, rtd);   // fresh: seed the prototypes into the one empty scene
       }
-      // Legacy scenes also had a transient 'game' section (runtime ship instances);
-      // it's intentionally dropped — the authored 'objects' are the single scene now.
       rtd.restoreRetainedPrototypes(saved.retainedPrototypes);   // templates of deleted prototypes
       ensureMetronomePrototype(gs, rtd);   // always offered in the editor's prototype dropdown
       ensureDrumKickPrototype(gs, rtd);
       ensureProjectilePrototypes(gs, rtd);   // before the launchers, which reference them by name
       ensureDownbeatLauncherPrototype(gs, rtd);
       ensureFourMeasureLauncherPrototype(gs, rtd);
+      if (rtd.onScenesChange) rtd.onScenesChange();   // build the scene tabs (init may run after onActivate)
     };
     if (gs.canvasWidth > 0) {
       initScene();
@@ -526,6 +550,24 @@ function ensureProjectilePrototypes(gs, rtd) {
     x: gs.canvasWidth / 2 + 40, y,
     shape: 'circle', fill: true, size: 12, color: '#e0567b', speed: 0.3, explodes: true, aoeRadius: 90, lifetime: 4000,
   });
+}
+
+// Coerce a saved file (new or legacy) into { prototypes, scenes, activeScene }.
+//   New format: { prototypes:{id:rec}, scenes:[{id,name,objects:{id:rec}}], activeScene }.
+//   Legacy format: a flat { objects:{id:rec} } mixing prototypes and instances — split it,
+//   putting the prototypes in the global set and every instance into a single "Scene 1".
+// Always returns at least one scene, and an activeScene that names an existing one.
+function normalizeSaved(saved) {
+  if (Array.isArray(saved.scenes)) {
+    const scenes = saved.scenes.length ? saved.scenes : [{ id: 'scene-1', name: 'Scene 1', objects: {} }];
+    const active = scenes.some((s) => s.id === saved.activeScene) ? saved.activeScene : scenes[0].id;
+    return { prototypes: saved.prototypes || {}, scenes, activeScene: active };
+  }
+  // Legacy: one flat objects map. Prototypes → global; instances → the first scene.
+  const objects = saved.objects || {};
+  const prototypes = {}, instances = {};
+  for (const [id, rec] of Object.entries(objects)) (rec.isPrototype ? prototypes : instances)[id] = rec;
+  return { prototypes, scenes: [{ id: 'scene-1', name: 'Scene 1', objects: instances }], activeScene: 'scene-1' };
 }
 
 // Rebuild one persisted instance. Ship shapes can't be serialized, so they're

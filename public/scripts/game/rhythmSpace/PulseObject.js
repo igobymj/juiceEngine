@@ -259,6 +259,15 @@ export default class PulseObject {
   // audio-clock time. __scheduledThrough is a realTimeSinceStartup watermark of how
   // far ahead we've scheduled, so beats are enqueued exactly once. A stalled frame
   // (e.g. a backgrounded tab) is collapsed to "now", never a catch-up burst.
+  // Whether mute currently silences this object. Mute is an AUTHORING aid — it takes effect
+  // only in editor/objects mode. In real game play mute is ignored (the object plays); use
+  // the per-object volume to quiet it in the actual mix.
+  _muteActive() {
+    if (!this.muted) return false;
+    const rtd = this.gameSession && this.gameSession.rtdManager;
+    return !rtd || rtd.mode !== 'game';
+  }
+
   _scheduleAudio(t) {
     // A quad launcher isn't a per-beat drum (it sounds when it fires, see playSoundNow), and a
     // projectile definition is a silent template — neither does per-beat scheduling.
@@ -273,7 +282,7 @@ export default class PulseObject {
     let beat = anchor + Math.ceil((from - anchor) / interval) * interval;
     if (beat <= from) beat += interval;
 
-    const audible = !this.muted && this.sound && this.sound !== 'none';
+    const audible = !this._muteActive() && this.sound && this.sound !== 'none';
     const snd = audible && this.gameSession.soundManager.getSound(this.sound);
     const now = window.Tone ? Tone.now() : 0;
     while (beat <= horizon) {
@@ -288,7 +297,7 @@ export default class PulseObject {
   // event-driven shot — the downbeat launcher — so the sound syncs with the (frame-detected)
   // fire, rather than the sample-accurate per-beat scheduling in _scheduleAudio.
   playSoundNow() {
-    if (this.muted || !this.sound || this.sound === 'none') return;
+    if (this._muteActive() || !this.sound || this.sound === 'none') return;
     const snd = this.gameSession.soundManager.getSound(this.sound);
     if (snd && typeof snd.play === 'function') {
       snd.play({ volume: this.volume, at: window.Tone ? Tone.now() : 0 });

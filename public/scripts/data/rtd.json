@@ -1,99 +1,13 @@
 {
-  "objects": {
-    "obj-15": {
-      "name": "downbeat gun left",
-      "kind": "downbeatLauncher",
-      "type": "launcher",
-      "isPrototype": false,
-      "prototypeId": "obj-14",
-      "x": 472.25,
-      "y": 624.25,
-      "radius": 60,
-      "color": "#7bd88b",
-      "bpm": 100,
-      "pulseScale": 1.6,
-      "relax": 0.16,
-      "sound": "kick",
-      "behavior": "none",
-      "volume": -40,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0,
-      "timeSignature": "4/4",
-      "spawnAtLaunch": false,
-      "verts": [
-        {
-          "x": 9.75,
-          "y": 3.75
-        },
-        {
-          "x": -4.25,
-          "y": 7.75
-        },
-        {
-          "x": -12.25,
-          "y": 1.75
-        },
-        {
-          "x": 6.75,
-          "y": -13.25
-        }
-      ],
-      "projectile": "projectile",
-      "patternMeasures": 1,
-      "patternSteps": [
-        0,
-        3
-      ],
-      "attachPoint": "left",
-      "lifespanPhrases": 8,
-      "overrides": {
-        "pulseScale": true,
-        "sound": true,
-        "volume": true,
-        "phaseOffset": true,
-        "patternSteps": true,
-        "attachPoint": true,
-        "lifespanPhrases": true
-      }
-    },
-    "obj-17": {
-      "name": "metronome",
-      "kind": "metronome",
-      "type": "metronome",
-      "isPrototype": false,
-      "prototypeId": null,
-      "x": 73,
-      "y": 154.5,
-      "radius": 38,
-      "color": "#cfc7e6",
-      "bpm": 100,
-      "pulseScale": 1.35,
-      "relax": 0.16,
-      "sound": "snare",
-      "behavior": "none",
-      "volume": -19,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0,
-      "timeSignature": "4/4",
-      "spawnAtLaunch": false,
-      "overrides": {
-        "radius": true,
-        "bpm": true,
-        "pulseScale": true,
-        "sound": true,
-        "volume": true
-      }
-    },
+  "prototypes": {
     "obj-18": {
       "name": "p_four measure gun",
       "kind": "fourMeasureLauncher",
       "type": "launcher",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 1086.25,
-      "y": 650.25,
+      "x": 387.25,
+      "y": 440.25,
       "radius": 60,
       "color": "#e0567b",
       "bpm": 100,
@@ -133,58 +47,14 @@
       "attachPoint": "nose",
       "lifespanPhrases": 4
     },
-    "obj-19": {
-      "name": "offbeater",
-      "kind": "fourMeasureLauncher",
-      "type": "launcher",
-      "isPrototype": false,
-      "prototypeId": "obj-18",
-      "x": 659.75,
-      "y": 699.75,
-      "color": "#5b8ee1",
-      "verts": [
-        {
-          "x": -5.75,
-          "y": -9.75
-        },
-        {
-          "x": 8.25,
-          "y": -2.75
-        },
-        {
-          "x": 6.25,
-          "y": 10.25
-        },
-        {
-          "x": -8.75,
-          "y": 2.25
-        }
-      ],
-      "projectile": "blue_bomb",
-      "patternMeasures": 1,
-      "patternSteps": [
-        0,
-        4
-      ],
-      "attachPoint": "right",
-      "lifespanPhrases": 16,
-      "overrides": {
-        "color": true,
-        "patternMeasures": true,
-        "patternSteps": true,
-        "projectile": true,
-        "attachPoint": true,
-        "lifespanPhrases": true
-      }
-    },
     "obj-20": {
       "name": "p_projectile",
       "kind": "projectile",
       "type": "projectile",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 471,
-      "y": 566,
+      "x": 391,
+      "y": 535,
       "radius": 60,
       "color": "#7bd88b",
       "bpm": 100,
@@ -208,20 +78,20 @@
       "spinSpeed": -0.012,
       "beatpulse": 0.35
     },
-    "obj-21": {
-      "name": "fat_sam",
+    "obj-31": {
+      "name": "p_prototype",
       "kind": "projectile",
       "type": "projectile",
-      "isPrototype": false,
+      "isPrototype": true,
       "prototypeId": null,
-      "x": 975,
-      "y": 726,
+      "x": 859.5,
+      "y": 523,
       "radius": 60,
-      "color": "#e0567b",
+      "color": "#606fe1",
       "bpm": 100,
       "pulseScale": 1.6,
       "relax": 0.16,
-      "sound": "kick",
+      "sound": "none",
       "behavior": "none",
       "volume": -6,
       "muted": false,
@@ -229,118 +99,15 @@
       "phaseOffset": 0,
       "timeSignature": "4/4",
       "spawnAtLaunch": false,
-      "shape": "circle",
-      "fill": true,
-      "size": 12,
-      "speed": 0.3,
-      "explodes": true,
+      "shape": "triangle",
+      "fill": false,
+      "size": 8,
+      "speed": 0.6,
+      "explodes": false,
       "aoeRadius": 90,
-      "lifetime": 4000,
-      "spinSpeed": 0,
-      "beatpulse": 0.45,
-      "overrides": {
-        "beatpulse": true
-      }
-    },
-    "obj-22": {
-      "name": "spinningTri",
-      "kind": "projectile",
-      "type": "projectile",
-      "isPrototype": false,
-      "prototypeId": "obj-20",
-      "x": 875,
-      "y": 512,
-      "color": "#e3cad0",
-      "shape": "triangle",
-      "fill": false,
-      "size": 5,
-      "spinSpeed": -0.003,
-      "overrides": {
-        "shape": true,
-        "fill": true,
-        "color": true,
-        "spinSpeed": true,
-        "size": true
-      }
-    },
-    "obj-23": {
-      "name": "blueTri",
-      "kind": "projectile",
-      "type": "projectile",
-      "isPrototype": false,
-      "prototypeId": "obj-20",
-      "x": 1024,
-      "y": 538,
-      "color": "#5b8ee1",
-      "shape": "triangle",
-      "fill": false,
-      "speed": 0.65,
-      "spinSpeed": 0.006,
-      "overrides": {
-        "color": true,
-        "shape": true,
-        "fill": true,
-        "spinSpeed": true,
-        "speed": true
-      }
-    },
-    "obj-24": {
-      "name": "four measure gun",
-      "kind": "fourMeasureLauncher",
-      "type": "launcher",
-      "isPrototype": false,
-      "prototypeId": "obj-18",
-      "x": 862.25,
-      "y": 662.25,
-      "color": "#979192",
-      "verts": [
-        {
-          "x": -6.25,
-          "y": -13.25
-        },
-        {
-          "x": 5.75,
-          "y": -13.25
-        },
-        {
-          "x": 14.75,
-          "y": 12.75
-        },
-        {
-          "x": -13.25,
-          "y": 12.75
-        }
-      ],
-      "projectile": "spinningTri",
-      "patternMeasures": 1,
-      "overrides": {
-        "color": true,
-        "patternMeasures": true,
-        "projectile": true
-      }
-    },
-    "obj-2": {
-      "name": "p_spaceship",
-      "kind": "ship",
-      "type": "ship",
-      "isPrototype": true,
-      "prototypeId": null,
-      "x": 657,
-      "y": 540,
-      "radius": 37,
-      "color": "#cfc7e6",
-      "bpm": 100,
-      "pulseScale": 1.05,
-      "relax": 0.16,
-      "sound": "none",
-      "behavior": "none",
-      "volume": -19,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0,
-      "timeSignature": "4/4",
-      "spawnAtLaunch": true,
-      "svg": "media/svg/spaceship.svg"
+      "lifetime": 1500,
+      "spinSpeed": 0.007,
+      "beatpulse": 0
     }
   },
   "retainedPrototypes": [
@@ -371,24 +138,6 @@
       "y": 518.5,
       "radius": 60,
       "color": "#e6a15c",
-      "bpm": 100,
-      "pulseScale": 1.6,
-      "relax": 0.16,
-      "sound": "kick",
-      "volume": -6,
-      "muted": false,
-      "division": 1,
-      "phaseOffset": 0
-    },
-    {
-      "name": "p_metronome",
-      "kind": "metronome",
-      "isPrototype": true,
-      "prototypeId": null,
-      "x": 1066,
-      "y": 518.5,
-      "radius": 100,
-      "color": "#cfc7e6",
       "bpm": 100,
       "pulseScale": 1.6,
       "relax": 0.16,
@@ -433,6 +182,183 @@
           "y": 30
         }
       ]
+    },
+    {
+      "name": "p_metronome",
+      "kind": "metronome",
+      "type": "metronome",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 102,
+      "y": 190.5,
+      "radius": 39,
+      "color": "#cfc7e6",
+      "bpm": 100,
+      "pulseScale": 1.05,
+      "relax": 0.16,
+      "sound": "kick",
+      "behavior": "none",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "timeSignature": "4/4",
+      "spawnAtLaunch": false,
+      "overrides": {
+        "radius": true
+      }
+    },
+    {
+      "name": "p_spaceship",
+      "kind": "ship",
+      "type": "ship",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 535,
+      "y": 578,
+      "radius": 37,
+      "color": "#cfc7e6",
+      "bpm": 100,
+      "pulseScale": 1.05,
+      "relax": 0.16,
+      "sound": "none",
+      "behavior": "none",
+      "volume": -19,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "timeSignature": "4/4",
+      "spawnAtLaunch": true,
+      "svg": "media/svg/spaceship.svg"
     }
-  ]
+  ],
+  "scenes": [
+    {
+      "id": "scene-1",
+      "name": "neon_dream",
+      "playOrder": 0,
+      "objects": {
+        "obj-28": {
+          "name": "four measure gun",
+          "kind": "fourMeasureLauncher",
+          "type": "launcher",
+          "isPrototype": false,
+          "prototypeId": "obj-18",
+          "x": 862.25,
+          "y": 662.25,
+          "color": "#979192",
+          "spawnAtLaunch": false,
+          "verts": [
+            {
+              "x": -6.25,
+              "y": -13.25
+            },
+            {
+              "x": 5.75,
+              "y": -13.25
+            },
+            {
+              "x": 14.75,
+              "y": 12.75
+            },
+            {
+              "x": -13.25,
+              "y": 12.75
+            }
+          ],
+          "projectile": "spinningTri",
+          "patternMeasures": 1,
+          "overrides": {
+            "color": true,
+            "patternMeasures": true,
+            "projectile": true
+          }
+        },
+        "obj-29": {
+          "name": "100bpm_metronome",
+          "kind": "metronome",
+          "type": "metronome",
+          "isPrototype": false,
+          "prototypeId": null,
+          "x": 65.5,
+          "y": 176,
+          "radius": 39,
+          "color": "#cfc7e6",
+          "bpm": 100,
+          "pulseScale": 1.05,
+          "relax": 0.16,
+          "sound": "kick",
+          "behavior": "none",
+          "volume": -6,
+          "muted": true,
+          "division": 1,
+          "phaseOffset": 0,
+          "timeSignature": "4/4",
+          "spawnAtLaunch": false,
+          "overrides": {
+            "radius": true,
+            "muted": true
+          }
+        },
+        "obj-30": {
+          "name": "100bpm_spaceship",
+          "kind": "ship",
+          "type": "ship",
+          "isPrototype": false,
+          "prototypeId": "obj-2",
+          "x": 654.5,
+          "y": 670,
+          "radius": 37,
+          "color": "#cfc7e6",
+          "bpm": 100,
+          "pulseScale": 1.05,
+          "relax": 0.16,
+          "sound": "none",
+          "behavior": "none",
+          "volume": -19,
+          "muted": false,
+          "division": 1,
+          "phaseOffset": 0,
+          "timeSignature": "4/4",
+          "spawnAtLaunch": true,
+          "svg": "media/svg/spaceship.svg"
+        }
+      }
+    },
+    {
+      "id": "scene-2",
+      "name": "Rust",
+      "playOrder": 1,
+      "objects": {
+        "undefined": {
+          "name": "125bpm_metronome",
+          "kind": "metronome",
+          "type": "metronome",
+          "isPrototype": false,
+          "prototypeId": "obj-25",
+          "x": 203,
+          "y": 184.5,
+          "radius": 39,
+          "color": "#cfc7e6",
+          "bpm": 125,
+          "pulseScale": 1.05,
+          "relax": 0.16,
+          "sound": "kick",
+          "behavior": "none",
+          "volume": -6,
+          "muted": false,
+          "division": 1,
+          "phaseOffset": 0,
+          "timeSignature": "4/4",
+          "spawnAtLaunch": false,
+          "overrides": {
+            "radius": true,
+            "bpm": true
+          },
+          "id": "undefined"
+        }
+      }
+    }
+  ],
+  "activeScene": "scene-1"
 }

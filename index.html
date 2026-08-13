@@ -46,6 +46,11 @@
     <button class="tab" data-mode="editor">editor</button>
   </nav>
 
+  <!-- Scene tabs — one authored scene per tab, shown only in RTD's editor mode.
+       Objects (prototypes) are global; each scene is its own set of placed instances.
+       Populated from RtdManager.sceneList() in index.js. -->
+  <nav id="rtd-scene-tabs"></nav>
+
   <script src="https://cdn.jsdelivr.net/npm/tone@14/build/Tone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.min.js"></script>
   <script type="module" src="./public/scripts/index.js"></script>

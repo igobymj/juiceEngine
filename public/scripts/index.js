@@ -316,6 +316,30 @@ const RTD_MODES = ['objects', 'game', 'editor'];
 const applyRtdModeClass = (mode) =>
   RTD_MODES.forEach((m) => document.body.classList.toggle('mode-' + m, m === mode));
 
+// (Re)build the scene-tab strip (#rtd-scene-tabs) from the manager's scene list. One tab
+// per scene (click to switch), plus a trailing "+" that adds a new scene. Shown only in
+// editor mode (CSS). Rebuilt whenever scenes change (add / delete / rename / switch).
+function refreshRtdSceneTabs(gs) {
+  const nav = document.getElementById('rtd-scene-tabs');
+  if (!nav) return;
+  const rtd = gs.rtdManager;
+  nav.innerHTML = '';
+  for (const s of rtd.sceneList()) {
+    const b = document.createElement('button');
+    b.className = 'scene-tab' + (s.id === rtd.activeSceneId ? ' active' : '');
+    b.textContent = s.name;
+    b.title = `Switch to ${s.name} (play order ${s.playOrder})`;
+    b.addEventListener('click', () => rtd.switchScene(s.id));
+    nav.appendChild(b);
+  }
+  const add = document.createElement('button');
+  add.className = 'scene-add';
+  add.textContent = '+';
+  add.title = 'New scene';
+  add.addEventListener('click', () => rtd.addScene('Scene'));
+  nav.appendChild(add);
+}
+
 // Persist the whole RTD scene (both collections, by instance) to
 // public/scripts/data/rtd.json via the dev server. Shared by the objects-mode
 // editor and the editor-mode objects fold. Returns true on success.
@@ -336,7 +360,7 @@ async function saveRtdScene(gs) {
 // is also where per-object juice settings would hang off once instances carry
 // their own (today they inherit everything but position from their prototype).
 // Sits above the juice/sound/extras folds; re-renders on selection/object change.
-function mountRtdObjectsFold(gs, editorEl) {
+function mountRtdObjectsFold(gs, editorEl, opts = {}) {
   const rtd = gs.rtdManager;
   const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -352,7 +376,25 @@ function mountRtdObjectsFold(gs, editorEl) {
   }
 
   const render = () => {
-    const protos = rtd.prototypes;
+    // Active-scene controls: rename, or delete (kept enabled only while >1 scene exists).
+    // Switching scenes is done from the #rtd-scene-tabs strip; the "+" there adds one.
+    const scenes = rtd.sceneList();
+    const active = scenes.find((s) => s.id === rtd.activeSceneId);
+    const sceneHtml = `
+      <label style="display:block;">
+        <span class="row" style="display:block; margin-bottom:4px;">scene name</span>
+        <input type="text" value="${esc(active ? active.name : '')}" data-ctrl="sceneName">
+      </label>
+      <label style="display:block;">
+        <span class="row" style="display:block; margin-bottom:4px;">play order</span>
+        <input type="number" step="1" value="${active ? active.playOrder : 0}" data-ctrl="playOrder">
+      </label>
+      <button data-ctrl="delScene" class="danger"${scenes.length <= 1 ? ' disabled' : ''}>delete scene</button>
+      <hr style="border:none; border-top:1px solid rgba(255,255,255,0.08); margin:14px 0;">`;
+
+    // Every prototype is addable to a scene (live ones plus retained templates of deleted
+    // prototypes — createFromPrototype stamps from either). Added, it becomes an instance.
+    const protos = rtd.prototypeChoices();
     const addHtml = protos.length
       ? `<label>
            <span class="row" style="display:block; margin-bottom:4px;">add instance from prototype</span>
@@ -361,24 +403,71 @@ function mountRtdObjectsFold(gs, editorEl) {
          <button data-ctrl="add" class="primary">add object</button>`
       : `<p class="hint">No prototypes yet. Create them in objects mode.</p>`;
 
+    // The scene's objects — instances only (prototypes are global, never "in" a scene). Each
+    // row selects the object (click the name) and deletes it from the scene (the ✕ button).
+    const instances = rtd.objects.filter((o) => !o.isPrototype);
+    const listHtml = `<p class="row" style="margin-top:14px; margin-bottom:4px;">objects in scene</p>`
+      + (instances.length
+        ? `<div class="scene-objs">${instances.map((o) => `
+             <div class="scene-obj-row${o === rtd.selected ? ' selected' : ''}">
+               <button class="scene-obj-name" data-sel="${esc(o.id)}" title="Select">${esc(o.name)}</button>
+               <button class="scene-obj-del danger" data-del="${esc(o.id)}" title="Delete from scene">✕</button>
+             </div>`).join('')}</div>`
+        : `<p class="hint">No objects in this scene yet. Add one above.</p>`);
+
     const sel = rtd.selected;
     const selHtml = sel
       ? `<label style="display:block; margin-top:12px;">
            <span class="row" style="display:block; margin-bottom:4px;">name</span>
            <input type="text" value="${esc(sel.name ?? '')}" data-ctrl="name">
          </label>
-         <p class="hint">drag on the canvas to reposition · Delete key removes</p>
-         <button data-ctrl="delete" class="danger">delete object</button>`
-      : `<p class="hint" style="margin-top:12px;">click an object to select · drag to reposition</p>`;
+         <p class="hint">drag on the canvas to reposition</p>
+         <div style="display:flex; gap:8px;">
+           <button data-ctrl="edit" class="primary" style="flex:1;">edit object</button>
+           <button data-ctrl="delete" class="danger" style="flex:1;">delete object</button>
+         </div>`
+      : '';
 
-    fold.body.innerHTML = addHtml + selHtml;
+    fold.body.innerHTML = sceneHtml + addHtml + listHtml + selHtml;
+
+    fold.body.querySelectorAll('[data-sel]').forEach((b) => b.addEventListener('click', () => {
+      const o = rtd.objects.find((x) => x.id === b.dataset.sel);
+      if (o) rtd.select(o);
+    }));
+    fold.body.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
+      const o = rtd.objects.find((x) => x.id === b.dataset.del);
+      if (o) rtd.deleteObject(o);   // instances only — prototypes aren't listed here
+    }));
+
+    const sceneName = fold.body.querySelector('[data-ctrl="sceneName"]');
+    if (sceneName) sceneName.addEventListener('change', (e) => {
+      rtd.renameScene(rtd.activeSceneId, e.target.value);
+      render();   // reflect any uniquification
+    });
+    const playOrder = fold.body.querySelector('[data-ctrl="playOrder"]');
+    if (playOrder) playOrder.addEventListener('change', (e) => {
+      rtd.setScenePlayOrder(rtd.activeSceneId, e.target.value);
+      render();   // reflect the coerced integer
+    });
+    const delScene = fold.body.querySelector('[data-ctrl="delScene"]');
+    if (delScene) delScene.addEventListener('click', () => rtd.deleteScene(rtd.activeSceneId));
 
     const protoSel = fold.body.querySelector('[data-ctrl="proto"]');
     const add = fold.body.querySelector('[data-ctrl="add"]');
     if (add) add.addEventListener('click', () => {
       if (protoSel && protoSel.value) {
-        const obj = rtd.createFromPrototype(protoSel.value, { x: gs.canvasWidth / 2, y: gs.canvasHeight / 2 });
-        if (obj) rtd.select(obj);   // ships build async (no return) and select on click instead
+        try {
+          const obj = rtd.createFromPrototype(protoSel.value, { x: gs.canvasWidth / 2, y: gs.canvasHeight / 2 });
+          if (obj) {
+            rtd.select(obj);   // re-renders the fold, revealing the instance's name field
+            // A new instance is a copy of the prototype (named "<prototype> N"); it must get
+            // its own name — focus the name field with the text selected so renaming is the
+            // immediate next action.
+            const ni = fold.body.querySelector('[data-ctrl="name"]');
+            if (ni) { ni.focus(); ni.select(); }
+          }
+          // Ships build async (no return) and select on canvas click — renamed there instead.
+        } catch (err) { window.alert(err && err.message ? err.message : String(err)); }   // one-metronome-per-scene
       }
     });
     const nameInput = fold.body.querySelector('[data-ctrl="name"]');
@@ -388,6 +477,14 @@ function mountRtdObjectsFold(gs, editorEl) {
     });
     const del = fold.body.querySelector('[data-ctrl="delete"]');
     if (del) del.addEventListener('click', () => rtd.deleteSelected());
+    // Edit object: bring up the object-editing interface in the right panel, in place (no
+    // mode/context switch) — its SAVE returns here (see mountObjectEditor). Instances are all
+    // editable there; x/y is per-instance (not inherited), so it stays as placed in the scene.
+    const edit = fold.body.querySelector('[data-ctrl="edit"]');
+    if (edit) edit.addEventListener('click', () => {
+      const obj = rtd.selected;
+      if (obj && opts.onEditObject) opts.onEditObject(obj);
+    });
   };
 
   render();
@@ -410,6 +507,23 @@ rtdApp.onActivate = (gs) => {
     });
   };
 
+  // In-place object editing from the scene editor's EDIT OBJECT button: replace the whole
+  // editor-mode panel with the full object-editing interface for `obj`, WITHOUT leaving
+  // editor mode. Its SAVE button persists the scene and returns to the scene editor
+  // (onDone → re-mount the editor-mode panel).
+  const mountObjectEditor = (obj) => {
+    gs.rtdManager.onSelectionChange = null;   // detach the scene fold's subscriptions
+    gs.rtdManager.onObjectsChange = null;
+    gs.rtdManager.onSceneDirty = null;
+    editorEl.innerHTML = '';
+    new RtdEditor(gs.rtdManager, editorEl, {
+      soundNames: () => gs.soundManager.names(),
+      onSave: () => saveRtdScene(gs),
+      onDone: () => mountForMode('editor'),   // SAVE → back to the scene editor
+    });
+    if (obj) gs.rtdManager.select(obj);       // the editor renders the selected object
+  };
+
   // 'editor' mounts the shared juice/sounds/extras folds. Persists to its own file
   // (rtdJuice.json) so it never collides with the object scene in rtd.json.
   const mountForMode = (mode) => {
@@ -424,15 +538,19 @@ rtdApp.onActivate = (gs) => {
       optionSources: { musicTracks: musicTrackOptions },   // enumerated from media/music
       onApply: (b, p, v) => rtdExtraApply(gs, b, p, v),     // music side effects
     }, {
-      prepend: (editorEl) => mountRtdObjectsFold(gs, editorEl),
+      prepend: (editorEl) => mountRtdObjectsFold(gs, editorEl, { onEditObject: mountObjectEditor }),
     });
     // 'game': panel stays hidden by CSS; leave whatever is mounted.
   };
 
   const modes = gs.rtdManager.modes;
   applyRtdModeClass(modes.current);   // ModeManager doesn't re-apply on re-activation
-  modes.onChange = (name) => { applyRtdModeClass(name); mountForMode(name); };
+  modes.onChange = (name) => { applyRtdModeClass(name); mountForMode(name); refreshRtdSceneTabs(gs); };
   mountForMode(modes.current);
+
+  // Scene tabs live outside the mode panels (their own strip); rebuild on any scene change.
+  gs.rtdManager.onScenesChange = () => refreshRtdSceneTabs(gs);
+  refreshRtdSceneTabs(gs);
 };
 
 // Clear RTD's mode-* body classes when leaving, so 'mode-editor' can't linger

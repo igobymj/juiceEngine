@@ -26,6 +26,7 @@ export default class Projectile extends VectorGameObject {
     this.__fill = def.fill !== false;
     this.__color = def.color || '#ffffff';
     this.__explodes = !!def.explodes;
+    this.__preview = !!def.preview;   // editor preview: fly/spin/expire only, no collision or damage
     this.__aoe = def.aoeRadius ?? 90;
     this.__lifetime = def.lifetime ?? 1500;
     this.__spin = def.spinSpeed ?? 0;                                   // radians per ms
@@ -70,8 +71,9 @@ export default class Projectile extends VectorGameObject {
     }
 
     // Radius-based hit test (a moving disc of __size) — robust and forgiving. An exploder
-    // detonates its AOE on contact; a plain projectile destroys the rock it hits.
-    const asteroids = this.gameSession.asteroidManager;
+    // detonates its AOE on contact; a plain projectile destroys the rock it hits. A preview
+    // projectile skips this entirely (no gameplay side effects while auditioning a definition).
+    const asteroids = !this.__preview && this.gameSession.asteroidManager;
     if (asteroids && typeof asteroids.projectileHit === 'function') {
       const hit = asteroids.projectileHit(this.__position, this.__size);
       if (hit >= 0) {

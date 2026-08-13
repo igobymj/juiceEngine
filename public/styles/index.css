@@ -261,3 +261,76 @@ body:not(.app-rtd) #rtd-tabs { display: none !important; }
    hide the editor entirely in game mode (play, not edit). */
 body.app-rtd #editor { top: 40px; }
 body.app-rtd.mode-game #editor { display: none !important; }
+
+/* Scene tabs: a second strip below the mode tabs, only in editor mode. Each scene is
+   its own set of placed instances (prototypes stay global). */
+#rtd-scene-tabs {
+  display: none;
+  position: fixed;
+  top: calc(var(--tab-h) + 40px); left: 0; right: 0;
+  height: 34px;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 12px;
+  background: rgba(16, 16, 20, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 6;
+  overflow-x: auto;
+}
+body.app-rtd.mode-editor #rtd-scene-tabs { display: flex; }
+/* In editor mode the scene strip sits under the mode tabs, so drop the panel below both. */
+body.app-rtd.mode-editor #editor { top: 74px; }
+#rtd-scene-tabs .scene-tab {
+  background: transparent;
+  border: none;
+  color: #8a867a;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  padding: 0 14px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#rtd-scene-tabs .scene-tab:hover { color: #c8c4b6; }
+#rtd-scene-tabs .scene-tab.active { color: #e8e6e0; border-bottom-color: #6aa8d8; }
+#rtd-scene-tabs .scene-add {
+  background: transparent;
+  border: none;
+  color: #8a867a;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 12px;
+  cursor: pointer;
+}
+#rtd-scene-tabs .scene-add:hover { color: #e8e6e0; }
+
+/* The editor-mode "objects in scene" list: one selectable/deletable row per instance. */
+#editor .scene-objs { display: flex; flex-direction: column; gap: 2px; }
+#editor .scene-obj-row {
+  display: flex; align-items: center; gap: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+#editor .scene-obj-row.selected { background: rgba(106, 168, 216, 0.22); }
+#editor .scene-obj-name {
+  flex: 1; min-width: 0;
+  text-align: left;
+  background: transparent; border: none;
+  color: #cbc7bd; font: inherit; font-size: 12px;
+  padding: 5px 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer;
+}
+#editor .scene-obj-row.selected .scene-obj-name { color: #e8e6e0; }
+#editor .scene-obj-name:hover { color: #e8e6e0; background: transparent; }
+#editor .scene-obj-del {
+  flex: 0 0 auto;
+  background: transparent; border: none;
+  color: #8a867a; font-size: 13px; line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+#editor .scene-obj-del:hover { color: #e06a6a; background: transparent; }

@@ -18,6 +18,7 @@ export default class RtdEditor {
     this.panelEl = panelEl;
     this.onCreate = options.onCreate || null;
     this.onSave = options.onSave || null;   // persists the scene; returns truthy on success
+    this.onDone = options.onDone || null;   // in-place edit: SAVE persists and returns to caller
     this.soundNames = options.soundNames || (() => []);
 
     this._refresh();
@@ -25,34 +26,48 @@ export default class RtdEditor {
     this.manager.onObjectsChange = () => this._refresh();   // scene populated / object added or removed
   }
 
+  // Change an object's type via the dropdown. convertType enforces the one-metronome-per-scene
+  // rule by throwing; catch it, surface the message, and re-render (which resets the dropdown to
+  // the object's unchanged type).
+  _convertType(o, value) {
+    try { this.manager.convertType(o, value); }
+    catch (err) { window.alert(err && err.message ? err.message : String(err)); }
+    this._refresh();
+  }
+
   _refresh() {
     const o = this.manager.selected;
-    if (!o) this._renderEmpty();
-    else this._renderControls(o);
+    // In the in-place edit context, losing the selection (deselect on empty canvas, or the
+    // edited object deleted) exits back to the scene editor rather than showing an empty panel.
+    if (!o) { if (this.onDone) this.onDone(); else this._renderEmpty(); return; }
+    this._renderControls(o);
   }
 
   _headerHtml() {
-    // Save persists to public/scripts/data/rtd.json via the dev server, so it
-    // only makes sense on localhost (matches the juice/settings editors).
+    // In-place edit context (opened via the scene editor's EDIT OBJECT): a focused header —
+    // SAVE persists the scene and returns to the scene editor (see _doSaveAndReturn). No
+    // create-from-prototype control here; you're editing one object, not adding new ones.
+    if (this.onDone) {
+      return `
+        <h2>Edit object</h2>
+        <button data-ctrl="done" class="primary">save</button>
+        <div class="hint" data-status></div>
+      `;
+    }
+    // OBJECTS mode is the prototype library: click a prototype to edit it. Objects are
+    // instantiated in scenes (editor mode's "add instance"), not here — so there's no
+    // create control. New prototypes come from checking PROTOTYPE on a scene object.
+    // Save persists to public/scripts/data/rtd.json via the dev server, so it only makes
+    // sense on localhost (matches the juice/settings editors).
     const isDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const saveHtml = (this.onSave && isDev)
       ? `<button data-ctrl="save">save objects</button><div class="hint" data-status></div>`
       : '';
 
-    // New objects are created from a prototype, chosen here. Includes retained
-    // templates of deleted prototypes so those types stay selectable.
-    const protos = this.manager.prototypeChoices();
-    const createHtml = protos.length
-      ? `<label>
-           <span class="row" style="display:block; margin-bottom:4px;">new object from prototype</span>
-           <select data-ctrl="proto">${protos.map((o) => `<option value="${this._esc(o.name)}">${this._esc(o.name)}</option>`).join('')}</select>
-         </label>
-         <button data-ctrl="create" class="primary">add object</button>`
-      : `<p class="hint">No prototypes yet. Mark an object as a prototype to create new objects from it.</p>`;
-
     return `
       <h2>Rhythm Space</h2>
-      ${createHtml}
+      <p class="hint">Object prototypes — click one to edit. Instances are placed in scenes (editor mode).</p>
+      <button data-ctrl="new-proto" class="primary">new prototype</button>
       ${saveHtml}
     `;
   }
@@ -60,6 +75,20 @@ export default class RtdEditor {
   _esc(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // Mute toggle — every object has one. It's an AUTHORING aid: the `muted` flag silences the
+  // object in editor/objects mode only (it keeps pulsing/animating). Real game play ignores
+  // mute — quiet an object there with its volume. Especially handy on the metronome, the
+  // master clock you usually want silent while editing. Wired by the `muted` handlers in
+  // _wireControls / _wireProjectile.
+  _muteHtml(o) {
+    const hint = o.kind === 'metronome' ? ' — silent beat reference' : '';
+    return `
+      <label class="checkbox">
+        <input type="checkbox" data-ctrl="muted" ${o.muted ? 'checked' : ''}>
+        mute in editor${hint}
+      </label>`;
   }
 
   _renderEmpty() {
@@ -106,7 +135,7 @@ export default class RtdEditor {
       </label>
 
       <label class="checkbox">
-        <input type="checkbox" data-ctrl="spawnAtLaunch" ${o.spawnAtLaunch ? 'checked' : ''}>
+        <input type="checkbox" data-ctrl="spawnAtLaunch" ${o.spawnAtLaunch ? 'checked' : ''} ${o.isPrototype ? 'disabled' : ''}>
         spawn at launch (game mode only)
       </label>
 
@@ -138,6 +167,8 @@ export default class RtdEditor {
         <span class="row" style="display:block; margin-bottom:4px;">sound</span>
         <select data-ctrl="sound">${soundOpts}</select>
       </label>
+
+      ${this._muteHtml(o)}
 
       <button data-ctrl="delete" class="danger">delete object</button>
     `;
@@ -184,6 +215,8 @@ export default class RtdEditor {
       <label class="slider"><span class="row"><span>beatpulse</span><span class="val" data-val="beatpulse">${o.beatpulse.toFixed(2)}</span></span>
         <input type="range" min="0" max="1" step="0.05" value="${o.beatpulse}" data-ctrl="beatpulse"></label>
 
+      ${this._muteHtml(o)}
+
       <button data-ctrl="delete" class="danger">delete object</button>
     `;
     this._wireHeader();
@@ -207,14 +240,22 @@ export default class RtdEditor {
     slider('lifetime', 'lifetime', (v) => `${v.toFixed(0)} ms`);
     slider('spinSpeed', 'spinSpeed', (v) => v.toFixed(3));
     slider('beatpulse', 'beatpulse', (v) => v.toFixed(2));
-    $('[data-ctrl="type"]').addEventListener('change', (e) => { this.manager.convertType(o, e.target.value); this._refresh(); });
+    // Fire a sample projectile to preview the effect when rotation (spinSpeed), speed or
+    // lifetime is changed — on release ('change'), so dragging a slider doesn't spam previews.
+    ['spinSpeed', 'speed', 'lifetime'].forEach((ctrl) => {
+      const el = $(`[data-ctrl="${ctrl}"]`);
+      if (el) el.addEventListener('change', () => this.manager.previewProjectile(o));
+    });
+    $('[data-ctrl="type"]').addEventListener('change', (e) => this._convertType(o, e.target.value));
     $('[data-ctrl="shape"]').addEventListener('change', (e) => { o.shape = e.target.value; override('shape'); });
     $('[data-ctrl="fill"]').addEventListener('change', (e) => { o.fill = e.target.checked; override('fill'); });
     $('[data-ctrl="explodes"]').addEventListener('change', (e) => { o.explodes = e.target.checked; override('explodes'); });
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
+    const muteEl = $('[data-ctrl="muted"]');
+    if (muteEl) muteEl.addEventListener('change', (e) => { o.muted = e.target.checked; override('muted'); });
     $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
     $('[data-ctrl="name"]').addEventListener('change', (e) => { this.manager.renameObject(o, e.target.value); this._refresh(); });
-    $('[data-ctrl="isPrototype"]').addEventListener('change', (e) => { o.isPrototype = e.target.checked; this.manager.renameObject(o, o.name); this._refresh(); });
+    $('[data-ctrl="isPrototype"]').addEventListener('change', (e) => { this.manager.setPrototype(o, e.target.checked); this._refresh(); });
   }
 
   // A quad launcher is a free quadrilateral shaped by dragging its corner handles on the
@@ -273,11 +314,6 @@ export default class RtdEditor {
           <select data-ctrl="timeSignature">${RtdEditor.TIME_SIGNATURES
             .map((s) => `<option value="${s}" ${s === (o.timeSignature || '4/4') ? 'selected' : ''}>${s}</option>`)
             .join('')}</select>
-        </label>
-
-        <label class="checkbox">
-          <input type="checkbox" data-ctrl="muted" ${o.muted ? 'checked' : ''}>
-          mute (silent beat reference)
         </label>`;
     }
     const cur = o.division ?? 1;
@@ -301,10 +337,27 @@ export default class RtdEditor {
     const btn = this.panelEl.querySelector('[data-ctrl="create"]');
     if (btn) btn.addEventListener('click', () => {
       const name = sel ? sel.value : null;
-      if (name && this.onCreate) this.onCreate(name);
+      // onCreate (createFromPrototype) can throw the one-metronome-per-scene rule — surface it.
+      try { if (name && this.onCreate) this.onCreate(name); }
+      catch (err) { window.alert(err && err.message ? err.message : String(err)); }
     });
+    const newProto = this.panelEl.querySelector('[data-ctrl="new-proto"]');
+    if (newProto) newProto.addEventListener('click', () => this.manager.createPrototype());   // auto-selects for editing
     const save = this.panelEl.querySelector('[data-ctrl="save"]');
     if (save) save.addEventListener('click', () => this._doSave());
+    const done = this.panelEl.querySelector('[data-ctrl="done"]');
+    if (done) done.addEventListener('click', () => this._doSaveAndReturn());
+  }
+
+  // In-place edit SAVE: persist the scene (best-effort — returns even if it fails or the
+  // dev server isn't there), then hand control back to the caller (the scene editor).
+  async _doSaveAndReturn() {
+    const status = this.panelEl.querySelector('[data-status]');
+    if (this.onSave) {
+      if (status) status.textContent = 'saving…';
+      try { await this.onSave(); } catch (e) { /* return regardless of save outcome */ }
+    }
+    if (this.onDone) this.onDone();
   }
 
   async _doSave() {
@@ -377,7 +430,7 @@ export default class RtdEditor {
 
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
     $('[data-ctrl="sound"]').addEventListener('change', (e) => { o.sound = e.target.value; override('sound'); this._previewSound(o); });
-    $('[data-ctrl="type"]').addEventListener('change', (e) => { this.manager.convertType(o, e.target.value); this._refresh(); });
+    $('[data-ctrl="type"]').addEventListener('change', (e) => this._convertType(o, e.target.value));
     const spawnEl = $('[data-ctrl="spawnAtLaunch"]');
     if (spawnEl) spawnEl.addEventListener('change', (e) => { o.spawnAtLaunch = e.target.checked; override('spawnAtLaunch'); });
     $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
@@ -391,8 +444,7 @@ export default class RtdEditor {
     // Toggling prototype status changes what the create dropdown offers, and
     // adds/strips the "p_" prototype-name prefix so the namespaces stay separate.
     $('[data-ctrl="isPrototype"]').addEventListener('change', (e) => {
-      o.isPrototype = e.target.checked;
-      this.manager.renameObject(o, o.name);
+      this.manager.setPrototype(o, e.target.checked);
       this._refresh();
     });
   }

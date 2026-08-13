@@ -1,11 +1,13 @@
 /*
  * RtdManager — owns the RTD rhythm objects (PulseObjects).
  *
- * There is ONE authored scene (this.__objects) shared by every mode. 'objects' mode
- * authors/edits it, 'editor' mode tunes juice over it, and 'game' mode plays it —
- * all rendering and updating the same objects. The mode only gates behaviour
- * (interactive select/drag vs play, what's hidden in play), not the object set, and
- * the whole scene persists as one section of rtd.json (see serialize).
+ * Objects split into GLOBAL prototypes (authored in 'objects' mode) and per-SCENE
+ * instances. Prototypes live in __objects always and are shared by every scene; each
+ * scene owns its own placed instances, and only the ACTIVE scene's instances sit in
+ * __objects alongside the prototypes (inactive scenes are parked as records — see the
+ * Scenes section). 'editor' mode picks the active scene via its tab bar. The mode gates
+ * behaviour (interactive select/drag vs play, what's hidden in play), not the object set.
+ * Prototypes + every scene persist as sections of rtd.json (see serialize).
  *
  * Mirrors the primitives CreatureManager's role for the editor: it tracks the
  * selected object and exposes onSelectionChange so the editor can re-render.
@@ -14,6 +16,7 @@
 
 import Manager from "../../engine/Managers/Manager.js";
 import PulseObject from "./PulseObject.js";
+import Projectile from "./Projectile.js";
 
 export default class RtdManager extends Manager {
   constructor(gameSession) {
@@ -40,9 +43,25 @@ export default class RtdManager extends Manager {
     // serialize()), not live objects; persisted with the scene. See deleteSelected /
     // createFromPrototype / prototypeChoices.
     this.__retainedPrototypes = [];
+    // Scenes. OBJECTS-mode prototypes are GLOBAL — always present in __objects, shared by
+    // every scene. Each scene owns its own set of placed INSTANCES (non-prototype objects).
+    // The active scene's instances live in __objects alongside the global prototypes; the
+    // instances of inactive scenes are parked as records in __sceneStore until selected.
+    // __scenes is the ordered tab list [{ id, name }]; __activeSceneId names the live one.
+    this.__scenes = [];
+    this.__sceneStore = new Map();   // sceneId -> [instance records] (inactive scenes only)
+    this.__activeSceneId = null;
+    this.__sceneSeq = 0;             // backs auto-generated "scene-N" ids
+    this.onScenesChange = null;      // editor subscribes (scene added / removed / renamed / switched)
+    this.__suspendDirty = false;     // set while (re)instantiating on a scene switch, so it stays clean
+    // Editor projectile previews — sample shots the projectile editor fires to audition a
+    // definition's rotation/speed/lifetime. Owned here (not the mode-gated ProjectileManager)
+    // so they render in OBJECTS mode too; ticked/drawn each frame, removed when they expire.
+    this.__previews = [];
   }
 
-  // The single authored scene — every mode renders, updates, and edits the same set.
+  // The active working set — global prototypes + the active scene's instances. Every mode
+  // renders, updates, and edits the same set (only the active scene's instances at a time).
   get objects() { return this.__objects; }
   get _allObjects() { return this.__objects; }
 
@@ -72,8 +91,137 @@ export default class RtdManager extends Manager {
     return this.__retainedPrototypes.some((r) => r.kind === kind);
   }
 
+  // ---- Scenes -------------------------------------------------------------
+  // The active scene's instances live in __objects; inactive scenes are parked as records.
+
+  // The tab list (id, name, playOrder), in order. The editor renders one tab per entry.
+  // playOrder is the sequence game mode plays scenes in; it must be unique (see
+  // assertUniquePlayOrder) and defaults to 0.
+  sceneList() { return this.__scenes.map((s) => ({ id: s.id, name: s.name, playOrder: s.playOrder })); }
+  get activeSceneId() { return this.__activeSceneId; }
+
+  // Install the scene tab list and the active id (from a load). Instance instantiation is
+  // driven by the app; inactive scenes are handed to parkSceneRecords. Seeds the id counter
+  // past any loaded "scene-N" so new ids don't collide.
+  initScenes(metaList, activeId) {
+    this.__scenes = (metaList || []).map((m) => ({ id: m.id, name: m.name, playOrder: Number(m.playOrder) || 0 }));
+    this.__sceneStore = new Map();
+    this.__activeSceneId = activeId || (this.__scenes[0] && this.__scenes[0].id) || null;
+    for (const s of this.__scenes) {
+      const m = /^scene-(\d+)$/.exec(s.id);
+      if (m) this.__sceneSeq = Math.max(this.__sceneSeq, Number(m[1]));
+    }
+  }
+
+  // Park an inactive scene's instance records (from a load). Kept until the scene is selected.
+  parkSceneRecords(id, records) { this.__sceneStore.set(id, Array.isArray(records) ? records : []); }
+
+  // Switch the active scene: serialize the current instances back to the store, strip them
+  // from __objects (prototypes stay — they're global), then re-instantiate the target scene's
+  // records. Selection, ship and launcher-attachment runtime reset for the new scene.
+  switchScene(id) {
+    if (id === this.__activeSceneId || !this.__scenes.some((s) => s.id === id)) return;
+    // Park the current scene's live instances as save-ready records, removing them in place.
+    const parked = [];
+    for (let i = this.__objects.length - 1; i >= 0; i--) {
+      if (this.__objects[i].isPrototype) continue;
+      parked.unshift(this._record(this.__objects[i]));
+      this.__objects.splice(i, 1);
+    }
+    this.__sceneStore.set(this.__activeSceneId, parked);
+    this.__activeSceneId = id;
+    this.select(null);
+    this.ship = null;
+    this.__gameShipReady = false;        // game mode re-ensures a ship for the new scene
+    this._clearLauncherAttachments();
+    // Re-instantiate the target scene's parked records (async ships resolve into __objects).
+    const recs = this.__sceneStore.get(id) || [];
+    this.__sceneStore.delete(id);
+    this.__suspendDirty = true;
+    for (const rec of recs) { if (this.instantiate) this.instantiate({ ...rec, select: false }); }
+    this.__suspendDirty = false;
+    this.ship = this._findShip();
+    if (this.onObjectsChange) this.onObjectsChange();
+    if (this.onScenesChange) this.onScenesChange();
+  }
+
+  // Add a new (empty) scene and switch to it. playOrder defaults to 0 (like the first
+  // scene) — the author assigns a distinct order per scene; a collision is caught when game
+  // mode is invoked (assertUniquePlayOrder).
+  addScene(name) {
+    const id = `scene-${++this.__sceneSeq}`;
+    this.__scenes.push({ id, name: this._uniqueSceneName(name || 'Scene'), playOrder: 0 });
+    this._markDirty();
+    this.switchScene(id);            // parks the current scene, activates the empty new one
+    if (this.onScenesChange) this.onScenesChange();
+    return id;
+  }
+
+  // Set a scene's play order (the game-mode sequence position). Coerced to an integer;
+  // uniqueness is enforced lazily when game mode starts, not here, so authoring stays free.
+  setScenePlayOrder(id, order) {
+    const s = this.__scenes.find((x) => x.id === id);
+    if (!s) return;
+    const n = Math.trunc(Number(order));
+    s.playOrder = Number.isFinite(n) ? n : 0;
+    this._markDirty();
+    if (this.onScenesChange) this.onScenesChange();
+  }
+
+  // Throw if two scenes share a play order (invoked on entering game mode). Names the
+  // colliding order so the author can fix it.
+  assertUniquePlayOrder() {
+    const seen = new Map();
+    for (const s of this.__scenes) {
+      if (seen.has(s.playOrder)) {
+        throw new Error(`Rhythm Space: scenes "${seen.get(s.playOrder)}" and "${s.name}" share play order ${s.playOrder} — play order must be unique.`);
+      }
+      seen.set(s.playOrder, s.name);
+    }
+  }
+
+  // Rename a scene (kept unique among scene names).
+  renameScene(id, name) {
+    const s = this.__scenes.find((x) => x.id === id);
+    if (!s) return;
+    const trimmed = String(name ?? '').trim();
+    if (!trimmed) return;
+    s.name = this._uniqueSceneName(trimmed, id);
+    this._markDirty();
+    if (this.onScenesChange) this.onScenesChange();
+  }
+
+  // Delete a scene. Always keeps at least one. Deleting the active scene switches to a
+  // neighbour first (which parks the doomed instances), then drops its record.
+  deleteScene(id) {
+    if (this.__scenes.length <= 1) return;
+    const idx = this.__scenes.findIndex((s) => s.id === id);
+    if (idx < 0) return;
+    if (id === this.__activeSceneId) {
+      const next = this.__scenes[idx + 1] || this.__scenes[idx - 1];
+      this.switchScene(next.id);
+    }
+    this.__scenes = this.__scenes.filter((s) => s.id !== id);
+    this.__sceneStore.delete(id);
+    this._markDirty();
+    if (this.onScenesChange) this.onScenesChange();
+  }
+
+  // "Scene", "Scene 2", … unique among the other scenes' names (id excluded from the check).
+  _uniqueSceneName(base, exceptId) {
+    const taken = new Set(this.__scenes.filter((s) => s.id !== exceptId).map((s) => s.name));
+    if (!taken.has(base)) return base;
+    return this._uniqueName(base, taken);
+  }
+
   // Create a pulse object in the authored scene.
   createObject(opts = {}) {
+    // One metronome per scene: a metronome INSTANCE (not the global prototype) is the scene's
+    // bpm master, so a second placed metronome is ambiguous. Reject it loudly. (Prototypes are
+    // global templates, not "in a scene", so they never count toward this.)
+    if ((opts.kind === 'metronome') && !opts.isPrototype && this._metronomeInstances().length >= 1) {
+      throw new Error('Rhythm Space: a scene may contain only one metronome.');
+    }
     const obj = new PulseObject(this.gameSession, opts);
     obj.id = this._adoptId(opts.id);
     obj.name = this._adoptName(opts.name, obj.label, obj.isPrototype);   // globally unique
@@ -90,7 +238,14 @@ export default class RtdManager extends Manager {
   // can surface its save affordance. Silent until something subscribes, so loading
   // a scene doesn't mark it dirty.
   _markDirty() {
+    if (this.__suspendDirty) return;   // scene switch re-instantiates instances; that's not an edit
     if (this.onSceneDirty) this.onSceneDirty();
+  }
+
+  // Metronome instances placed in the active scene (excludes the global prototype). The
+  // scene invariant is at most one; _findMaster prefers it as the bpm master.
+  _metronomeInstances() {
+    return this.__objects.filter((o) => o.kind === 'metronome' && !o.isPrototype);
   }
 
   // Create a new object by cloning a prototype's settings into the active
@@ -112,6 +267,25 @@ export default class RtdManager extends Manager {
     rec.y = opts.y ?? (rec.y ?? 0) + 40;
     // rec.name stays the prototype's; createObject uniquifies it (e.g. "spaceship 1").
     return this.instantiate(rec);
+  }
+
+  // Create a brand-new prototype from scratch (the object editor's "new prototype" button).
+  // A plain pulse object flagged as a prototype, placed at canvas centre and auto-selected
+  // for editing; the author then sets its type/sound/etc. via the dropdown. Defaults to the
+  // neutral 'target' stub (a valid taxonomy type that renders as a plain circle) rather than a
+  // deprecated kind. Lives in the global prototype library (OBJECTS mode).
+  createPrototype(opts = {}) {
+    const gs = this.gameSession;
+    return this.createObject({
+      name: opts.name || 'prototype',
+      isPrototype: true,
+      kind: opts.kind || 'target',
+      type: opts.type || 'target',
+      x: opts.x ?? (gs.canvasWidth / 2),
+      y: opts.y ?? (gs.canvasHeight / 2),
+      bpm: 100,
+      sound: 'none',
+    });
   }
 
   // Instances mirror their prototype's editable properties, pulled every frame so an
@@ -150,6 +324,7 @@ export default class RtdManager extends Manager {
     if (mode === this.mode) return;
     this.select(null);
     this._clearLauncherAttachments();   // collection is game-runtime only; reset on any mode change
+    this.__previews = [];               // drop any editor projectile preview on a mode change
     this.mode = mode;
     this.ship = this._findShip();
   }
@@ -218,6 +393,19 @@ export default class RtdManager extends Manager {
     this._markDirty();
   }
 
+  // Toggle an object's prototype flag (the editor's PROTOTYPE checkbox). Checking it while
+  // editing a scene object PROMOTES it to a global prototype: it leaves the scene (serialize
+  // partitions by isPrototype; switchScene keeps prototypes in __objects), joins the prototype
+  // library shown in OBJECTS mode, and drops its instance links so it's a clean template.
+  // Renaming applies/strips the "p_" prefix. Notifies so the scene's object list drops it.
+  setPrototype(obj, isProto) {
+    obj.isPrototype = !!isProto;
+    if (obj.isPrototype) { obj.prototypeId = null; obj.overrides = null; }
+    this.renameObject(obj, obj.name);   // marks dirty
+    if (obj === this.ship && obj.isPrototype) this.ship = this._findShip();   // a prototype isn't the live ship
+    if (this.onObjectsChange) this.onObjectsChange();
+  }
+
   // Prototype names carry a "p_" prefix; instance names never do. Normalizing on
   // this rule at every naming point keeps the two namespaces from colliding, so an
   // instance can freely take the plain name its prototype is based on.
@@ -268,15 +456,37 @@ export default class RtdManager extends Manager {
     return null;
   }
 
-  // Persistable scene: the authored objects keyed by instance id, plus the retained
-  // prototype templates. (Legacy saves also had a 'game' section — see the loader.)
+  // Persistable state: the GLOBAL prototypes (keyed by id), the retained prototype templates,
+  // and every SCENE with its own instances (keyed by id) — the active scene serialized live,
+  // inactive scenes from their parked records. activeScene names the tab to reopen on load.
+  // (Legacy saves had a flat 'objects' section instead — see the app's loader, which splits it
+  // into prototypes + a single scene.)
   serialize() {
-    const objects = {};
-    for (const o of this.__objects) objects[o.id] = this._record(o);
+    const prototypes = {};
+    const activeObjects = {};
+    for (const o of this.__objects) {
+      if (o.isPrototype) prototypes[o.id] = this._record(o);
+      else activeObjects[o.id] = this._record(o);
+    }
+    const scenes = this.__scenes.map((s) => ({
+      id: s.id,
+      name: s.name,
+      playOrder: s.playOrder,
+      objects: s.id === this.__activeSceneId ? activeObjects : this._parkedObjects(s.id),
+    }));
     return {
-      objects,
+      prototypes,
       retainedPrototypes: this.__retainedPrototypes,
+      scenes,
+      activeScene: this.__activeSceneId,
     };
+  }
+
+  // Parked records for an inactive scene, keyed by id (they're already _record()-processed).
+  _parkedObjects(id) {
+    const out = {};
+    for (const rec of (this.__sceneStore.get(id) || [])) out[rec.id] = rec;
+    return out;
   }
 
   // Prototypes and standalone objects persist in full. A linked instance drops the
@@ -306,16 +516,26 @@ export default class RtdManager extends Manager {
   }
 
   deleteSelected() {
-    if (!this.selected) return;
+    if (this.selected) this.deleteObject(this.selected);
+  }
+
+  // Remove a specific object from the working set (the active scene's instances, plus the
+  // global prototypes). Scene-object deletion (the editor's per-instance delete buttons)
+  // routes here; only instances live in a scene, so that path only ever passes instances.
+  deleteObject(obj) {
+    if (!obj) return;
     // A deleted prototype leaves its template behind, so the type stays selectable in
     // the create dropdown and survives the save. Newest wins on a name clash.
-    if (this.selected.isPrototype) this._retainPrototype(this.selected);
+    if (obj.isPrototype) this._retainPrototype(obj);
     const coll = this.objects;
-    const i = coll.indexOf(this.selected);
-    if (i >= 0) coll.splice(i, 1);
-    if (this.selected === this.ship) this.ship = null;
-    this.selected = null;
-    if (this.onSelectionChange) this.onSelectionChange();
+    const i = coll.indexOf(obj);
+    if (i < 0) return;
+    coll.splice(i, 1);
+    if (obj === this.ship) this.ship = null;
+    if (obj === this.selected) {
+      this.selected = null;
+      if (this.onSelectionChange) this.onSelectionChange();
+    }
     if (this.onObjectsChange) this.onObjectsChange();
     this._markDirty();
   }
@@ -345,7 +565,7 @@ export default class RtdManager extends Manager {
     const coll = this.objects;
     for (let i = coll.length - 1; i >= 0; i--) {
       const o = coll[i];
-      if (this._hiddenInGame(o)) continue;   // can't grab what isn't drawn
+      if (this._hiddenInMode(o)) continue;   // can't grab what isn't drawn
       if (o.contains(x, y)) {
         this.select(o);
         this.__drag = { obj: o, dx: o.x - x, dy: o.y - y, moved: false };   // keep the grab offset
@@ -375,18 +595,22 @@ export default class RtdManager extends Manager {
     this.__drag = null;
   }
 
-  // A metronome is a juice-editor beat reference: it renders and ticks in the
-  // 'objects' design space (so its prototype stays editable) and in 'editor' mode,
-  // but is hidden and silent in real 'game' play. `modes` is set by the app; before
-  // it exists nothing is hidden. Game and editor share the 'game' collection, so
-  // this per-object check is what tells them apart.
-  _hiddenInGame(o) {
-    if (!this.modes || this.modes.current !== 'game') return false;
-    // Design-space only in real play: prototypes (templates — only placed instances are
-    // gameplay objects), the metronome (beat reference), and projectile definitions (a
-    // fired-from template). A consumed launcher (lifespan spent) is gone too, and a "spawn
-    // at launch" object stays hidden until the music has dropped (the launch).
-    return o.isPrototype || o.kind === 'metronome' || o.kind === 'projectile' || o.__expired
+  // Which objects are hidden (not rendered / updated / selectable) in the current mode.
+  // `modes` is set by the app; before it exists nothing is hidden.
+  _hiddenInMode(o) {
+    const mode = this.modes && this.modes.current;
+    // OBJECTS mode is the global prototype library: ONLY prototypes appear and are editable
+    // there. Placed instances live in scenes, so they're hidden here (seen in editor/game).
+    if (mode === 'objects') return !o.isPrototype;
+    // In a scene (editor/game), a prototype is a template, not scene content — hidden. So
+    // converting a scene object to a prototype immediately removes it from the scene view
+    // (it stays a global prototype, editable in OBJECTS mode).
+    if (o.isPrototype) return true;
+    if (mode !== 'game') return false;   // editor mode shows the scene's instances
+    // Real game play — also hide design-only kinds: the metronome (beat reference) and
+    // projectile definitions (a fired-from template). A consumed launcher (lifespan spent) is
+    // gone too, and a "spawn at launch" object stays hidden until the music drops (the launch).
+    return o.kind === 'metronome' || o.kind === 'projectile' || o.__expired
       || (o.spawnAtLaunch && !this.__musicDropped);
   }
 
@@ -395,7 +619,26 @@ export default class RtdManager extends Manager {
     this.moveShip();
     this.syncInstancesFromPrototypes();   // instances honor their prototype each frame
     if (this.mode === 'game') this._collectLaunchers();   // ship picks up downbeat launchers it touches
-    for (const o of this.objects) { if (this._hiddenInGame(o)) continue; o.update(); }
+    for (const o of this.objects) { if (this._hiddenInMode(o)) continue; o.update(); }
+    for (let i = this.__previews.length - 1; i >= 0; i--) {
+      if (!this.__previews[i].update()) this.__previews.splice(i, 1);   // flew off / lifetime spent
+    }
+  }
+
+  // Fire a sample projectile from the projectile editor to preview its rotation, speed and
+  // lifetime (called when those change). Uses the definition's own appearance; never explodes
+  // or collides (preview flag). Launches straight up from the lower-centre so it's visible, and
+  // replaces any prior preview so rapid edits don't pile up. Owned here so it renders in any mode.
+  previewProjectile(o) {
+    if (!o || o.kind !== 'projectile') return;
+    const gs = this.gameSession;
+    const def = {
+      shape: o.shape, fill: o.fill, size: o.size, color: o.color, speed: o.speed,
+      explodes: false, aoeRadius: o.aoeRadius, lifetime: o.lifetime,
+      spinSpeed: o.spinSpeed, beatpulse: o.beatpulse, launcherPulseScale: 1, preview: true,
+    };
+    const from = { x: gs.canvasWidth / 2, y: gs.canvasHeight * 0.8 };
+    this.__previews = [new Projectile(gs, from, -Math.PI / 2, def)];   // straight up
   }
 
   // The core metronome is the master clock: its bpm sets the grid tempo, and its
@@ -413,8 +656,12 @@ export default class RtdManager extends Manager {
     this.beatGrid.beatsPerBar = RtdManager.beatsPerBar(master && master.timeSignature);
   }
 
+  // The bpm master: a metronome INSTANCE placed in the active scene wins (the scene's own
+  // tempo), else the global metronome prototype (the default beat reference). At most one
+  // instance exists per scene (enforced in createObject).
   _findMaster() {
-    return this.__objects.find((o) => o.kind === 'metronome') || null;
+    const ms = this.__objects.filter((o) => o.kind === 'metronome');
+    return ms.find((o) => !o.isPrototype) || ms[0] || null;
   }
 
   // Change an object's high-level type (from the editor's type dropdown), updating its kind
@@ -422,6 +669,11 @@ export default class RtdManager extends Manager {
   // launcher kind (preserving a four-measure preset); everything else takes the canonical
   // kind. Kind-specific fields already exist on every PulseObject (defaults), so no re-init.
   convertType(o, type) {
+    // One metronome instance per scene (see createObject): block converting a second object
+    // into a metronome. Prototypes are global templates, so the limit is on instances only.
+    if (type === 'metronome' && !o.isPrototype && this._metronomeInstances().some((m) => m !== o)) {
+      throw new Error('Rhythm Space: a scene may contain only one metronome.');
+    }
     o.type = type;
     if (type === 'launcher') { if (!o.isQuad()) o.kind = 'downbeatLauncher'; }
     else o.kind = PulseObject.TYPE_KIND[type] || type;
@@ -490,7 +742,8 @@ export default class RtdManager extends Manager {
   }
 
   render() {
-    for (const o of this.objects) { if (this._hiddenInGame(o)) continue; o.render(); }
+    for (const o of this.objects) { if (this._hiddenInMode(o)) continue; o.render(); }
+    for (const p of this.__previews) p.render();   // editor projectile previews (above the objects)
     this._renderBpmReadout();
   }
 
@@ -517,7 +770,12 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 
 // Properties an instance inherits from its prototype (the editor-editable ones).
 // Identity/placement (name, position, isPrototype) stay per-instance.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'spawnAtLaunch', 'projectile', 'patternMeasures', 'patternSteps', 'attachPoint', 'lifespanPhrases', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
+// NOTE: `spawnAtLaunch` is intentionally NOT inherited — it's a per-instance placement flag
+// (does THIS placed object wait for the launch), like x/y. Inheriting it meant a non-overridden
+// instance got reset to the prototype's value by syncInstancesFromPrototypes each frame, so a
+// scene object's "spawn at launch" wouldn't stick. New instances still snapshot the prototype's
+// value at creation (createFromPrototype copies serialize()), then own it.
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectile', 'patternMeasures', 'patternSteps', 'attachPoint', 'lifespanPhrases', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
 
 // Beats per bar from an "n/d" time-signature string (the numerator); 4 by default.
 RtdManager.beatsPerBar = (sig) => {
