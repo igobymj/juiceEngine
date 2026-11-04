@@ -532,7 +532,7 @@ rtdApp.onActivate = (gs) => {
     gs.rtdManager.onSelectionChange = null;
     gs.rtdManager.onObjectsChange = null;
     gs.rtdManager.onSceneDirty = null;
-    if (mode === 'objects') mountObjectsPanel();          // re-subscribes
+    if (mode === 'objects') { gs.rtdManager.layoutPrototypes(); mountObjectsPanel(); }   // tidy so every prototype is on screen, then re-subscribe
     else if (mode === 'editor') mountEditors(gs, 'rtdJuice', {
       schema: rtdApp.extras.schema,
       optionSources: { musicTracks: musicTrackOptions },   // enumerated from media/music

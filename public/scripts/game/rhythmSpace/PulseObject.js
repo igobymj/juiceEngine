@@ -80,6 +80,13 @@ export default class PulseObject {
     this.projectile = projRef === 'bullet' ? 'projectile' : projRef === 'shell' ? 'burst' : projRef;
     this.patternMeasures = opts.patternMeasures ?? (this.kind === 'fourMeasureLauncher' ? 4 : 1);
     this.patternSteps = Array.isArray(opts.patternSteps) ? [...opts.patternSteps] : [0];
+    // What the sequencer pattern triggers on an active step: 'fire' (launch a projectile — the
+    // original behaviour) or 'pulse' (throb the object's scale on the pattern instead of on the
+    // fixed subdivision). An experiment: driving pulses from the step sequencer.
+    this.event = opts.event ?? 'fire';
+    // Sequencer step resolution: steps per quarter-note beat — 1 = quarter, 2 = eighth
+    // (default, the original grid), 4 = sixteenth. Sets the step clock and the sequencer grid.
+    this.granularity = opts.granularity ?? 2;
     // Which ship grab point this launcher attaches to when collected: nose | left | right.
     this.attachPoint = opts.attachPoint ?? 'nose';
     // Lifespan for a SIDE (left/right) attachment, counted in the launcher's pattern
@@ -119,6 +126,19 @@ export default class PulseObject {
     // drop); before launch it's hidden and inert. Editor mode ignores it (always present).
     this.spawnAtLaunch = opts.spawnAtLaunch ?? false;
 
+    // Obstacle-definition params (kind 'obstacle' — an authorable asteroid). The AsteroidManager
+    // spawns drifting rocks from this template. Drift velocity and tumble spin are RANDOMIZED per
+    // rock, each drawn from a [min,max] range (emulating the original per-size velocity spread);
+    // legacy single-value driftSpeed/spinSpeed migrate into the max. On destruction it spawns the
+    // prototype named `spawns` (bare name, or 'none') at `spawnProbability` (0..1). Appearance
+    // reuses size (scale) + color.
+    this.driftMin = opts.driftMin ?? 0;
+    this.driftMax = opts.driftMax ?? opts.driftSpeed ?? 1.5;
+    this.spinMin = opts.spinMin ?? 0;
+    this.spinMax = opts.spinMax ?? opts.spinSpeed ?? 0.02;
+    this.spawns = opts.spawns ?? 'none';
+    this.spawnProbability = opts.spawnProbability ?? 0;
+
     // --- runtime state ---
     this.__scale = 1;
     this.selected = false;
@@ -133,7 +153,7 @@ export default class PulseObject {
     // scheduled on the sample-accurate audio clock (see update / _scheduleAudio).
     const t0 = this.gameSession.timeManager.realTimeSinceStartup;
     this.__lastVisualBeat = this._beatAt(t0);
-    this.__lastStep = this._stepAt(t0);   // eighth-note step clock (downbeats + launcher trigger patterns)
+    this.__lastStep = this._stepAt(t0);   // step clock at the object's granularity (downbeats + sequencer patterns)
     this.__scheduledThrough = t0;
   }
 
@@ -164,21 +184,21 @@ export default class PulseObject {
     return anchor + Math.floor((t - anchor) / interval) * interval;
   }
 
-  // The eighth-note step index at time t, counted from barOrigin — the beat the music
-  // dropped on, so its step 0 is measure 1's downbeat (falls back to the grid epoch before
-  // any drop). A step is half a master beat; a measure is beatsPerBar*2 steps. Drives the
-  // bar-downbeat behaviours and each launcher's editable trigger pattern.
+  // The step index at time t, counted from barOrigin — the beat the music dropped on, so its
+  // step 0 is measure 1's downbeat (falls back to the grid epoch before any drop). A step is a
+  // master beat divided by `granularity` (1 = quarter, 2 = eighth, 4 = sixteenth). Drives the
+  // bar-downbeat behaviours and each object's editable sequencer pattern.
   _stepAt(t) {
     const grid = this._grid();
     const origin = grid.barOrigin != null ? grid.barOrigin : grid.epoch;
-    const stepInterval = grid.masterInterval / 2;
+    const stepInterval = grid.masterInterval / Math.max(1, this.granularity);
     return Math.floor((t - origin) / stepInterval);
   }
 
-  // Steps per bar for the current time signature (eighth notes: beatsPerBar * 2).
+  // Steps per bar = beats per bar × granularity (steps per beat).
   _stepsPerBar() {
     const grid = this._grid();
-    return Math.max(1, grid.beatsPerBar || 4) * 2;
+    return Math.max(1, grid.beatsPerBar || 4) * Math.max(1, this.granularity);
   }
 
   update() {
@@ -197,7 +217,7 @@ export default class PulseObject {
     const beat = this._beatAt(t);
     if (beat > this.__lastVisualBeat) {
       this.__lastVisualBeat = beat;
-      this.__scale = this.pulseScale;
+      if (this.event !== 'pulse') this.__scale = this.pulseScale;   // a 'pulse' event throbs on the sequencer steps instead of the subdivision
       this._onBeat();
     }
 
@@ -224,7 +244,7 @@ export default class PulseObject {
     if (this.__expired) return;
     if (!this.__attachedShip || !this.isQuad() || this.__attachSlot === 0) { this.__alpha = 1; return; }   // slot 0 = nose = infinite
     const grid = this._grid();
-    const phraseMs = Math.max(1, this.patternMeasures) * this._stepsPerBar() * (grid.masterInterval / 2);
+    const phraseMs = Math.max(1, this.patternMeasures) * this._stepsPerBar() * (grid.masterInterval / Math.max(1, this.granularity));
     const lifeMs = Math.max(1, this.lifespanPhrases) * phraseMs;
     const elapsed = t - (this.__attachTime ?? t);
     const p = Math.min(1, Math.max(0, elapsed / lifeMs));
@@ -244,10 +264,14 @@ export default class PulseObject {
   _onStep(step) {
     const stepsPerBar = this._stepsPerBar();
     if (step % stepsPerBar === 0 && this.behavior && this.behavior !== 'none') runBehaviorOnDownbeat(this);
-    if (!this.isQuad() || !this.__attachedShip || this.behavior === 'fire-on-downbeat') return;
+    if (this.behavior === 'fire-on-downbeat') return;   // its own downbeat handler already fired
+    // Active sequencer step → trigger the object's event. 'pulse' throbs the scale (no ship
+    // needed); 'fire' launches the projectile (a collected quad launcher, as before).
     const phraseLen = Math.max(1, this.patternMeasures) * stepsPerBar;
     const local = ((step % phraseLen) + phraseLen) % phraseLen;
-    if (this.patternSteps.includes(local)) this._fireLauncher();
+    if (!this.patternSteps.includes(local)) return;
+    if (this.event === 'pulse') { this.__scale = this.pulseScale; return; }
+    if (this.isQuad() && this.__attachedShip) this._fireLauncher();
   }
 
   // Fire the launcher's attached projectile from its current position.
@@ -271,7 +295,7 @@ export default class PulseObject {
   _scheduleAudio(t) {
     // A quad launcher isn't a per-beat drum (it sounds when it fires, see playSoundNow), and a
     // projectile definition is a silent template — neither does per-beat scheduling.
-    if (this.isQuad() || this.kind === 'projectile') return;
+    if (this.isQuad() || this.kind === 'projectile' || this.kind === 'obstacle') return;
     const grid = this._grid();
     const interval = grid.masterInterval / Math.max(0.01, this.division);
     const off = this.kind === 'metronome' ? 0 : this.phaseOffset;
@@ -314,8 +338,27 @@ export default class PulseObject {
     else if (this.isQuad()) this.renderQuad();
     else if (this.kind === 'metronome') this.renderMetronome();
     else if (this.kind === 'projectile') this.renderProjectilePreview();
+    else if (this.kind === 'obstacle') this.renderObstacle();
     else this.renderCircle();
     this.renderSelection();
+  }
+
+  // An obstacle definition (asteroid) shows as a static rock outline scaled by `size`,
+  // so the authored template reads as the rock the AsteroidManager will spawn.
+  renderObstacle() {
+    const p = this.gameSession.p5;
+    const s = (this.size || 20) / PulseObject.OBSTACLE_REF * this.__scale;
+    p.push();
+    p.translate(this.x, this.y);
+    p.scale(s);
+    const col = p.color(this.color);
+    p.noFill();
+    p.stroke(col);
+    p.strokeWeight(2 / Math.max(0.001, s));
+    p.beginShape();
+    for (const v of PulseObject.OBSTACLE_SHAPE) p.vertex(v.x, v.y);
+    p.endShape(p.CLOSE);
+    p.pop();
   }
 
   // A projectile definition shows as a static preview of its shape/fill/size/color where
@@ -564,13 +607,16 @@ export default class PulseObject {
       phaseOffset: this.phaseOffset,
       timeSignature: this.timeSignature,
       spawnAtLaunch: this.spawnAtLaunch,
+      // Sequencer pattern — any pulsing object can carry one (launcher fires / anything pulses).
+      patternMeasures: this.patternMeasures,
+      patternSteps: [...this.patternSteps],
+      event: this.event,
+      granularity: this.granularity,
     };
     if (this.kind === 'ship' && this.svg) s.svg = this.svg;
     if (this.isQuad()) {
       s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
       s.projectile = this.projectile;
-      s.patternMeasures = this.patternMeasures;
-      s.patternSteps = [...this.patternSteps];
       s.attachPoint = this.attachPoint;
       s.lifespanPhrases = this.lifespanPhrases;
     }
@@ -578,6 +624,12 @@ export default class PulseObject {
       s.shape = this.shape; s.fill = this.fill; s.size = this.size; s.speed = this.speed;
       s.explodes = this.explodes; s.aoeRadius = this.aoeRadius; s.lifetime = this.lifetime;
       s.spinSpeed = this.spinSpeed; s.beatpulse = this.beatpulse;
+    }
+    if (this.kind === 'obstacle') {
+      s.size = this.size;
+      s.driftMin = this.driftMin; s.driftMax = this.driftMax;
+      s.spinMin = this.spinMin; s.spinMax = this.spinMax;
+      s.spawns = this.spawns; s.spawnProbability = this.spawnProbability;
     }
     if (Object.keys(this.overrides).length) s.overrides = { ...this.overrides };
     return s;
@@ -660,8 +712,17 @@ PulseObject.MIGRATE_KIND = { downbeatGun: 'downbeatLauncher', fourMeasureGun: 'f
 // which converts an object between types). 'drum' is deprecated (kick-circle/drumKick).
 PulseObject.KIND_TYPE = {
   downbeatLauncher: 'launcher', fourMeasureLauncher: 'launcher', projectile: 'projectile',
-  metronome: 'metronome', ship: 'ship', circle: 'drum', drumKick: 'drum',
+  metronome: 'metronome', ship: 'ship', circle: 'drum', drumKick: 'drum', obstacle: 'obstacle',
 };
+
+// Base rock outline for an obstacle definition preview (the AsteroidManager's runtime rocks
+// use the fuller Asteroid polygons). Authored around a ±72 box; OBSTACLE_REF maps `size` to it.
+PulseObject.OBSTACLE_REF = 72;
+PulseObject.OBSTACLE_SHAPE = [
+  { x: 68, y: -51 }, { x: -3, y: -80 }, { x: -58, y: -51 }, { x: -71, y: 1 },
+  { x: -38, y: 62 }, { x: 4, y: 54 }, { x: 17, y: 34 }, { x: 33, y: 49 },
+  { x: 68, y: 26 }, { x: 72, y: -8 },
+];
 PulseObject.TYPE_KIND = {
   launcher: 'downbeatLauncher', projectile: 'projectile', metronome: 'metronome', ship: 'ship',
   target: 'target', pickup: 'pickup', obstacle: 'obstacle', trigger: 'trigger',

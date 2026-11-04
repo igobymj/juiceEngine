@@ -206,7 +206,7 @@ export default {
     gs.gameLoop.addUpdateSystem('rtd-music-loop', rtd.__musicLoop, 5);
 
     // Asteroids: drift, despawn off-screen, respawn when the field is cleared.
-    // Projectiles ask asteroidManager.collide(); a hit fires the asteroidHit event.
+    // Projectiles hit-test via asteroidManager.projectileHit/destroyAt; a hit fires asteroidHit.
     const asteroids = new AsteroidManager(gs, { event: 'asteroidHit' });
     gs.registerManager('asteroidManager', asteroids);
     gs.gameLoop.addUpdateSystem('rtd-asteroids', asteroids, 30);
@@ -313,6 +313,9 @@ export default {
       ensureProjectilePrototypes(gs, rtd);   // before the launchers, which reference them by name
       ensureDownbeatLauncherPrototype(gs, rtd);
       ensureFourMeasureLauncherPrototype(gs, rtd);
+      ensureObstaclePrototype(gs, rtd);   // the default asteroid the field spawns
+      ensureShipPrototype(gs, rtd);        // the ship is essential — always in the object library
+      rtd.layoutPrototypes();   // lay the prototype library out so every one shows in the object editor
       if (rtd.onScenesChange) rtd.onScenesChange();   // build the scene tabs (init may run after onActivate)
     };
     if (gs.canvasWidth > 0) {
@@ -430,7 +433,9 @@ function fireFromShipNose(gs, projectiles, ship) {
 // runtime instancing the game mode is built around. WASD then steers it.
 function ensureGameShip(gs, rtd) {
   if (rtd.__gameShipReady) return;
-  if (rtd.objects.some((o) => o.kind === 'ship')) { rtd.__gameShipReady = true; return; }  // loaded/saved one already
+  // Only a placed ship INSTANCE counts — a ship prototype is a hidden template, not the
+  // gameplay ship. A scene with no ship instance spawns one from the prototype below.
+  if (rtd.objects.some((o) => o.kind === 'ship' && !o.isPrototype)) { rtd.__gameShipReady = true; return; }
   const proto = rtd.prototypes.find((o) => o.kind === 'ship');
   if (!proto) return;   // ship prototype not imported yet — retry on the next game entry
   rtd.__gameShipReady = true;
@@ -570,6 +575,39 @@ function normalizeSaved(saved) {
   return { prototypes, scenes: [{ id: 'scene-1', name: 'Scene 1', objects: instances }], activeScene: 'scene-1' };
 }
 
+// Guarantee a default asteroid (obstacle) prototype exists — the authorable rock the
+// AsteroidManager spawns waves of. Seeded like the others so the field is never empty and
+// the 'obstacle' type is always demonstrable. Spawns nothing on destroy by default; the
+// author sets `spawns`/`spawnProbability` to build split chains or drops.
+function ensureObstaclePrototype(gs, rtd) {
+  if (rtd.prototypes.some((o) => o.kind === 'obstacle') || rtd.hasRetainedKind('obstacle')) return;
+  rtd.createObject({
+    name: 'asteroid', kind: 'obstacle', type: 'obstacle', isPrototype: true,
+    collection: 'objects', select: false,
+    x: gs.canvasWidth / 2, y: gs.canvasHeight / 2 - 160,
+    color: '#8a8580', size: 60,
+    driftMin: 0.4, driftMax: 1.6, spinMin: 0.004, spinMax: 0.016,   // varied drift/tumble, like the original rocks
+    spawns: 'none', spawnProbability: 0, sound: 'none',
+  });
+}
+
+// Guarantee a live ship prototype exists in the object library — the ship is essential, so
+// unlike the other seeders it also restores a previously-deleted (retained) ship rather than
+// respecting the deletion. Rebuilds from the retained template (keeping its svg/tuning) when
+// present, else a default spaceship. Async (SVG import); layoutPrototypes slots it on load.
+function ensureShipPrototype(gs, rtd) {
+  if (rtd.prototypes.some((o) => o.kind === 'ship')) return;   // already have a live ship prototype
+  const retained = rtd.takeRetainedByKind('ship');             // restore a deleted ship (un-retains it)
+  const rec = retained ? { ...retained } : { name: 'spaceship', bpm: 100, sound: 'kick' };
+  rec.isPrototype = true;
+  rec.collection = 'objects';
+  rec.select = false;
+  delete rec.id;                                               // mint a fresh id
+  rec.x = gs.canvasWidth / 2;
+  rec.y = gs.canvasHeight / 2;
+  buildShip(gs, rtd, rec);
+}
+
 // Rebuild one persisted instance. Ship shapes can't be serialized, so they're
 // re-imported from the record's svg source; everything else is applied as-is.
 function createFromRecord(gs, rtd, rec) {
@@ -626,7 +664,10 @@ function buildShip(gs, rtd, rec) {
       const flameNorm = normalizeShapes(flame.shapes, { about: { x: b.cx, y: b.cy }, scale })
         .map((shape) => shape.map((pt) => ({ x: pt.x, y: pt.y + FLAME_OFFSET_Y })));
       const flameObjs = svgToVectorObjects(gs, flameNorm, { strokeWeight: 2 });
-      rtd.createObject({ ...rec, kind: 'ship', svg, shapes: shipObjs, children: [{ shapes: flameObjs, blink: true }] });
+      const shipObj = rtd.createObject({ ...rec, kind: 'ship', svg, shapes: shipObjs, children: [{ shapes: flameObjs, blink: true }] });
+      // The ship loads async, after the initial layout pass — give the prototype a slot now
+      // so it doesn't land off-screen or on top of another prototype in the object editor.
+      if (shipObj && shipObj.isPrototype) rtd.layoutPrototypes();
     })
     .catch((e) => console.warn('spaceship SVG import failed:', e));
 }

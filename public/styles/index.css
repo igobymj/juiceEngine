@@ -220,6 +220,32 @@ body.app-primitives.mode-editor #editor { display: none; }
 }
 #editor button:hover { background: rgba(201, 162, 39, .28); }
 
+/* Per-feature "preview" buttons in the object editor — a blue tint sets them apart from the
+   gold action buttons; they play one dynamic effect (pulse / motion / drift / spawn) once. */
+#editor button.preview-btn {
+  display: block;
+  width: 100%;
+  margin: 2px 0 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  background: rgba(106, 168, 216, 0.14);
+  border-color: rgba(106, 168, 216, 0.4);
+  color: #bcd8ef;
+}
+#editor button.preview-btn:hover { background: rgba(106, 168, 216, 0.28); }
+#editor button.preview-btn:disabled { opacity: 0.4; cursor: default; background: rgba(106, 168, 216, 0.08); }
+#rtd-sequencer [data-seq="preview"] {
+  background: rgba(106, 168, 216, 0.18);
+  border: 1px solid rgba(106, 168, 216, 0.4);
+  color: #bcd8ef;
+  border-radius: 5px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+#rtd-sequencer [data-seq="preview"]:hover { background: rgba(106, 168, 216, 0.3); }
+
 /* ---------- primitives app UI (offset below game tabs; gated to its app) ---- */
 #mode-tabs { top: var(--tab-h) !important; }
 #editor-panel { top: calc(var(--tab-h) + 40px) !important; height: calc(100vh - var(--tab-h) - 40px) !important; }

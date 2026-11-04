@@ -101,6 +101,7 @@ export default class RtdEditor {
 
   _renderControls(o) {
     if (o.kind === 'projectile') return this._renderProjectile(o);
+    if (o.kind === 'obstacle') return this._renderObstacle(o);
     // A leading "none" option lets an object pulse silently. It's selected
     // whenever the object has no sound (or the sentinel 'none').
     const hasSound = o.sound && o.sound !== 'none';
@@ -152,6 +153,7 @@ export default class RtdEditor {
         <span class="row"><span>relax</span><span class="val" data-val="relax">${o.relax.toFixed(2)}</span></span>
         <input type="range" min="0.02" max="0.5" step="0.01" value="${o.relax}" data-ctrl="relax">
       </label>
+      <button data-ctrl="preview-pulse" class="preview-btn">▶ preview pulse</button>
 
       <label class="slider">
         <span class="row"><span>volume</span><span class="val" data-val="volume">${o.volume.toFixed(0)} dB</span></span>
@@ -214,6 +216,7 @@ export default class RtdEditor {
         <input type="range" min="-0.02" max="0.02" step="0.001" value="${o.spinSpeed}" data-ctrl="spinSpeed"></label>
       <label class="slider"><span class="row"><span>beatpulse</span><span class="val" data-val="beatpulse">${o.beatpulse.toFixed(2)}</span></span>
         <input type="range" min="0" max="1" step="0.05" value="${o.beatpulse}" data-ctrl="beatpulse"></label>
+      <button data-ctrl="preview-projectile" class="preview-btn">▶ preview motion</button>
 
       ${this._muteHtml(o)}
 
@@ -253,6 +256,93 @@ export default class RtdEditor {
     $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
     const muteEl = $('[data-ctrl="muted"]');
     if (muteEl) muteEl.addEventListener('change', (e) => { o.muted = e.target.checked; override('muted'); });
+    $('[data-ctrl="preview-projectile"]').addEventListener('click', () => this.manager.previewProjectile(o));
+    $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
+    $('[data-ctrl="name"]').addEventListener('change', (e) => { this.manager.renameObject(o, e.target.value); this._refresh(); });
+    $('[data-ctrl="isPrototype"]').addEventListener('change', (e) => { this.manager.setPrototype(o, e.target.checked); this._refresh(); });
+  }
+
+  // An obstacle definition (kind 'obstacle') — an authorable asteroid. The AsteroidManager
+  // spawns drifting rocks from it. Appearance is size (scale) + color; motion is drift speed +
+  // spin; and on destruction it spawns the chosen obstacle prototype at a probability.
+  _renderObstacle(o) {
+    const curType = o.type || 'obstacle';
+    const typeList = RtdEditor.TYPES.includes(curType) ? RtdEditor.TYPES : [curType, ...RtdEditor.TYPES];
+    const typeOpts = typeList.map((t) => `<option value="${t}" ${t === curType ? 'selected' : ''}>${t}</option>`).join('');
+    // Spawn target: any obstacle prototype (by bare name), or 'none'.
+    const names = ['none', ...this.manager.obstaclePrototypes().map((p) => p.name.replace(/^p_/, ''))];
+    const spawnOpts = names.map((n) => `<option value="${n}" ${n === (o.spawns || 'none') ? 'selected' : ''}>${this._esc(n)}</option>`).join('');
+    // Pulse subdivision — how many times per master beat the rock throbs (as on the ship).
+    const divOpts = RtdEditor.DIVISIONS
+      .map((d) => `<option value="${d.value}" ${d.value === (o.division ?? 1) ? 'selected' : ''}>${d.label}</option>`).join('');
+    this.panelEl.innerHTML = `
+      ${this._headerHtml()}
+      <h3>${this._esc(o.name ?? 'obstacle')}</h3>
+      <label><span class="row" style="display:block; margin-bottom:4px;">name</span>
+        <input type="text" value="${this._esc(o.name ?? '')}" data-ctrl="name"></label>
+      <label><span class="row" style="display:block; margin-bottom:4px;">type</span>
+        <select data-ctrl="type">${typeOpts}</select></label>
+      <label class="checkbox"><input type="checkbox" data-ctrl="isPrototype" ${o.isPrototype ? 'checked' : ''}> prototype (template for new objects)</label>
+
+      <label><span class="row" style="display:block; margin-bottom:4px;">color</span>
+        <input type="color" value="${o.color}" data-ctrl="color"></label>
+      <label class="slider"><span class="row"><span>size</span><span class="val" data-val="size">${o.size.toFixed(0)} px</span></span>
+        <input type="range" min="10" max="120" step="1" value="${o.size}" data-ctrl="size"></label>
+      <p class="hint" style="margin:10px 0 0;">drift speed — random per rock, in this range</p>
+      <label class="slider"><span class="row"><span>drift min</span><span class="val" data-val="driftMin">${o.driftMin.toFixed(2)}</span></span>
+        <input type="range" min="0" max="5" step="0.1" value="${o.driftMin}" data-ctrl="driftMin"></label>
+      <label class="slider"><span class="row"><span>drift max</span><span class="val" data-val="driftMax">${o.driftMax.toFixed(2)}</span></span>
+        <input type="range" min="0" max="5" step="0.1" value="${o.driftMax}" data-ctrl="driftMax"></label>
+      <p class="hint" style="margin:10px 0 0;">tumble spin — random magnitude per rock, in this range</p>
+      <label class="slider"><span class="row"><span>spin min</span><span class="val" data-val="spinMin">${o.spinMin.toFixed(3)}</span></span>
+        <input type="range" min="0" max="0.05" step="0.001" value="${o.spinMin}" data-ctrl="spinMin"></label>
+      <label class="slider"><span class="row"><span>spin max</span><span class="val" data-val="spinMax">${o.spinMax.toFixed(3)}</span></span>
+        <input type="range" min="0" max="0.05" step="0.001" value="${o.spinMax}" data-ctrl="spinMax"></label>
+      <label><span class="row" style="display:block; margin-bottom:4px;">pulse subdivision</span>
+        <select data-ctrl="division">${divOpts}</select></label>
+      <label class="slider"><span class="row"><span>pulse scale</span><span class="val" data-val="pulseScale">${o.pulseScale.toFixed(2)}×</span></span>
+        <input type="range" min="1" max="3" step="0.05" value="${o.pulseScale}" data-ctrl="pulseScale"></label>
+      <label class="slider"><span class="row"><span>relax</span><span class="val" data-val="relax">${o.relax.toFixed(2)}</span></span>
+        <input type="range" min="0.02" max="0.5" step="0.01" value="${o.relax}" data-ctrl="relax"></label>
+      <button data-ctrl="preview-obstacle" class="preview-btn">▶ preview rock (drift · spin · pulse)</button>
+
+      <label><span class="row" style="display:block; margin-bottom:4px;">spawns on destroy</span>
+        <select data-ctrl="spawns">${spawnOpts}</select></label>
+      <label class="slider"><span class="row"><span>spawn probability</span><span class="val" data-val="spawnProbability">${Math.round(o.spawnProbability * 100)}%</span></span>
+        <input type="range" min="0" max="1" step="0.05" value="${o.spawnProbability}" data-ctrl="spawnProbability"></label>
+      <button data-ctrl="preview-spawn" class="preview-btn"${o.spawns === 'none' ? ' disabled' : ''}>▶ preview spawn</button>
+
+      <button data-ctrl="delete" class="danger">delete object</button>
+    `;
+    this._wireHeader();
+    this._wireObstacle(o);
+  }
+
+  _wireObstacle(o) {
+    const $ = (sel) => this.panelEl.querySelector(sel);
+    const override = (key) => { if (!o.isPrototype) (o.overrides || (o.overrides = {}))[key] = true; };
+    const slider = (ctrl, key, fmt) => {
+      const el = $(`[data-ctrl="${ctrl}"]`);
+      if (!el) return;
+      el.addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value); o[key] = v; override(key);
+        const n = $(`[data-val="${ctrl}"]`); if (n) n.textContent = fmt(v);
+      });
+    };
+    slider('size', 'size', (v) => `${v.toFixed(0)} px`);
+    slider('driftMin', 'driftMin', (v) => v.toFixed(2));
+    slider('driftMax', 'driftMax', (v) => v.toFixed(2));
+    slider('spinMin', 'spinMin', (v) => v.toFixed(3));
+    slider('spinMax', 'spinMax', (v) => v.toFixed(3));
+    slider('pulseScale', 'pulseScale', (v) => `${v.toFixed(2)}×`);
+    slider('relax', 'relax', (v) => v.toFixed(2));
+    slider('spawnProbability', 'spawnProbability', (v) => `${Math.round(v * 100)}%`);
+    $('[data-ctrl="division"]').addEventListener('change', (e) => { o.division = parseFloat(e.target.value); override('division'); });
+    $('[data-ctrl="type"]').addEventListener('change', (e) => this._convertType(o, e.target.value));
+    $('[data-ctrl="color"]').addEventListener('input', (e) => { o.color = e.target.value; override('color'); });
+    $('[data-ctrl="spawns"]').addEventListener('change', (e) => { o.spawns = e.target.value; override('spawns'); this._refresh(); });   // re-render to enable/disable preview spawn
+    $('[data-ctrl="preview-obstacle"]').addEventListener('click', () => this.manager.previewObstacle(o));
+    $('[data-ctrl="preview-spawn"]').addEventListener('click', () => this.manager.previewSpawn(o));
     $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
     $('[data-ctrl="name"]').addEventListener('change', (e) => { this.manager.renameObject(o, e.target.value); this._refresh(); });
     $('[data-ctrl="isPrototype"]').addEventListener('change', (e) => { this.manager.setPrototype(o, e.target.checked); this._refresh(); });
@@ -433,6 +523,7 @@ export default class RtdEditor {
     $('[data-ctrl="type"]').addEventListener('change', (e) => this._convertType(o, e.target.value));
     const spawnEl = $('[data-ctrl="spawnAtLaunch"]');
     if (spawnEl) spawnEl.addEventListener('change', (e) => { o.spawnAtLaunch = e.target.checked; override('spawnAtLaunch'); });
+    $('[data-ctrl="preview-pulse"]').addEventListener('click', () => this.manager.previewPulse(o));
     $('[data-ctrl="delete"]').addEventListener('click', () => this.manager.deleteSelected());
 
     // Name is kept unique by the manager; re-render so the field reflects any

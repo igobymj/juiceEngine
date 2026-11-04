@@ -6,8 +6,8 @@
       "type": "launcher",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 387.25,
-      "y": 440.25,
+      "x": 90,
+      "y": 130,
       "radius": 60,
       "color": "#e0567b",
       "bpm": 100,
@@ -21,6 +21,12 @@
       "phaseOffset": 0,
       "timeSignature": "4/4",
       "spawnAtLaunch": false,
+      "patternMeasures": 4,
+      "patternSteps": [
+        0
+      ],
+      "event": "pulse",
+      "granularity": 2,
       "verts": [
         {
           "x": -6.25,
@@ -40,10 +46,6 @@
         }
       ],
       "projectile": "fat_sam",
-      "patternMeasures": 4,
-      "patternSteps": [
-        0
-      ],
       "attachPoint": "nose",
       "lifespanPhrases": 4
     },
@@ -53,8 +55,8 @@
       "type": "projectile",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 391,
-      "y": 535,
+      "x": 240,
+      "y": 130,
       "radius": 60,
       "color": "#7bd88b",
       "bpm": 100,
@@ -68,6 +70,12 @@
       "phaseOffset": 0,
       "timeSignature": "4/4",
       "spawnAtLaunch": false,
+      "patternMeasures": 1,
+      "patternSteps": [
+        0
+      ],
+      "event": "fire",
+      "granularity": 2,
       "shape": "line",
       "fill": false,
       "size": 6,
@@ -84,8 +92,8 @@
       "type": "projectile",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 859.5,
-      "y": 523,
+      "x": 390,
+      "y": 130,
       "radius": 60,
       "color": "#606fe1",
       "bpm": 100,
@@ -99,6 +107,12 @@
       "phaseOffset": 0,
       "timeSignature": "4/4",
       "spawnAtLaunch": false,
+      "patternMeasures": 1,
+      "patternSteps": [
+        0
+      ],
+      "event": "fire",
+      "granularity": 2,
       "shape": "triangle",
       "fill": false,
       "size": 8,
@@ -108,6 +122,99 @@
       "lifetime": 1500,
       "spinSpeed": 0.007,
       "beatpulse": 0
+    },
+    "obj-32": {
+      "name": "p_asteroid",
+      "kind": "obstacle",
+      "type": "obstacle",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 214,
+      "y": 469,
+      "radius": 60,
+      "color": "#8a8580",
+      "bpm": 100,
+      "pulseScale": 1.1,
+      "relax": 0.16,
+      "sound": "none",
+      "behavior": "none",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "timeSignature": "4/4",
+      "spawnAtLaunch": false,
+      "patternMeasures": 1,
+      "patternSteps": [
+        0
+      ],
+      "event": "pulse",
+      "granularity": 4,
+      "size": 60,
+      "driftMin": 0,
+      "driftMax": 1.5,
+      "spinMin": 0,
+      "spinMax": 0.01,
+      "spawns": "none",
+      "spawnProbability": 0
+    },
+    "obj-33": {
+      "name": "p_spaceship",
+      "kind": "ship",
+      "type": "ship",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 871.5,
+      "y": 676,
+      "radius": 37,
+      "color": "#cfc7e6",
+      "bpm": 100,
+      "pulseScale": 1.05,
+      "relax": 0.16,
+      "sound": "none",
+      "behavior": "none",
+      "volume": -19,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "timeSignature": "4/4",
+      "spawnAtLaunch": true,
+      "patternMeasures": 1,
+      "patternSteps": [
+        0
+      ],
+      "event": "fire",
+      "granularity": 2,
+      "svg": "media/svg/spaceship.svg"
+    },
+    "obj-34": {
+      "name": "p_spaceship 3",
+      "kind": "ship",
+      "type": "ship",
+      "isPrototype": true,
+      "prototypeId": null,
+      "x": 579,
+      "y": 531,
+      "radius": 100,
+      "color": "#cfc7e6",
+      "bpm": 100,
+      "pulseScale": 1.6,
+      "relax": 0.16,
+      "sound": "kick",
+      "behavior": "none",
+      "volume": -6,
+      "muted": false,
+      "division": 1,
+      "phaseOffset": 0,
+      "timeSignature": "4/4",
+      "spawnAtLaunch": false,
+      "patternMeasures": 1,
+      "patternSteps": [
+        0
+      ],
+      "event": "fire",
+      "granularity": 2,
+      "svg": "media/svg/spaceship.svg"
     }
   },
   "retainedPrototypes": [
@@ -209,26 +316,32 @@
       }
     },
     {
-      "name": "p_spaceship",
+      "name": "p_spaceship 2",
       "kind": "ship",
       "type": "ship",
       "isPrototype": true,
       "prototypeId": null,
-      "x": 535,
-      "y": 578,
-      "radius": 37,
+      "x": 542,
+      "y": 129,
+      "radius": 100,
       "color": "#cfc7e6",
       "bpm": 100,
-      "pulseScale": 1.05,
+      "pulseScale": 1.6,
       "relax": 0.16,
-      "sound": "none",
+      "sound": "kick",
       "behavior": "none",
-      "volume": -19,
+      "volume": -6,
       "muted": false,
       "division": 1,
       "phaseOffset": 0,
       "timeSignature": "4/4",
-      "spawnAtLaunch": true,
+      "spawnAtLaunch": false,
+      "patternMeasures": 1,
+      "patternSteps": [
+        0
+      ],
+      "event": "fire",
+      "granularity": 4,
       "svg": "media/svg/spaceship.svg"
     }
   ],
@@ -248,6 +361,7 @@
           "y": 662.25,
           "color": "#979192",
           "spawnAtLaunch": false,
+          "patternMeasures": 1,
           "verts": [
             {
               "x": -6.25,
@@ -267,7 +381,6 @@
             }
           ],
           "projectile": "spinningTri",
-          "patternMeasures": 1,
           "overrides": {
             "color": true,
             "patternMeasures": true,
@@ -295,6 +408,12 @@
           "phaseOffset": 0,
           "timeSignature": "4/4",
           "spawnAtLaunch": false,
+          "patternMeasures": 1,
+          "patternSteps": [
+            0
+          ],
+          "event": "fire",
+          "granularity": 2,
           "overrides": {
             "radius": true,
             "muted": true
@@ -306,8 +425,8 @@
           "type": "ship",
           "isPrototype": false,
           "prototypeId": "obj-2",
-          "x": 654.5,
-          "y": 670,
+          "x": 470.5,
+          "y": 834,
           "radius": 37,
           "color": "#cfc7e6",
           "bpm": 100,
@@ -321,7 +440,29 @@
           "phaseOffset": 0,
           "timeSignature": "4/4",
           "spawnAtLaunch": true,
+          "patternMeasures": 1,
+          "patternSteps": [
+            0
+          ],
+          "event": "fire",
+          "granularity": 2,
           "svg": "media/svg/spaceship.svg"
+        },
+        "obj-35": {
+          "name": "neon_asteroid_large",
+          "kind": "obstacle",
+          "type": "obstacle",
+          "isPrototype": false,
+          "prototypeId": "obj-32",
+          "x": 683.5,
+          "y": 478,
+          "pulseScale": 1,
+          "spawnAtLaunch": false,
+          "spinMax": 0.005,
+          "overrides": {
+            "spinMax": true,
+            "pulseScale": true
+          }
         }
       }
     },

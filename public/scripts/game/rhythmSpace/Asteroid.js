@@ -1,50 +1,69 @@
 /*
- * Asteroid — an RTD obstacle.
+ * Asteroid — a drifting, tumbling rock spawned from an authored obstacle definition.
  *
- * A drifting, rotating vector rock in three sizes (large → medium → small). It
- * moves along a fixed random heading and, unlike the asteroids project, does not
- * wrap: update() reports when it has left the screen so the manager can despawn
- * it. Splitting is driven by the manager via nextType. Adapted from the asteroids
- * project's Asteroid so RTD owns it (no eyeballs, no juice-pipeline coupling).
+ * The AsteroidManager builds these from an 'obstacle' PulseObject prototype (see
+ * RtdManager.obstacleDef): a base rock polygon scaled by the definition's `size`, drifting
+ * on a random heading at `driftSpeed`, tumbling at `spinSpeed`, tinted `color`. It carries
+ * its definition so, when destroyed, the manager knows what it spawns (`spawns` prototype,
+ * at `spawnProbability`). Extends VectorGameObject so it collides with projectiles.
  */
 
 import VectorGameObject from "../../engine/VectorGameObject.js";
 
-const VELOCITY_MAX = { large: 2, medium: 3, small: 4 };
-const MOVEMENT_MULTIPLIER = 0.1;   // scales the drift speed (with deltaTime)
-const ROTATION_SPEED = 128;        // larger = slower spin
+// Uniform random in [min,max], tolerating a swapped (min>max) range.
+const rand = (a, b) => { const lo = Math.min(a, b), hi = Math.max(a, b); return lo + Math.random() * (hi - lo); };
 
-const SHAPES = {
-  large: [
-    { x: 68, y: -51 }, { x: -3, y: -80 }, { x: -58, y: -51 }, { x: -71, y: 1 },
-    { x: -38, y: 62 }, { x: 4, y: 54 }, { x: 17, y: 34 }, { x: 33, y: 49 },
-    { x: 68, y: 26 }, { x: 72, y: -8 },
-  ],
-  medium: [
-    { x: -11, y: -41 }, { x: 26, y: -37 }, { x: 45, y: 8 }, { x: 30, y: 30 },
-    { x: -8, y: 41 }, { x: -43, y: 11 }, { x: -43, y: -23 }, { x: -19, y: -27 },
-  ],
-  small: [
-    { x: -1, y: -18 }, { x: 7, y: -9 }, { x: 9, y: 0 }, { x: 2, y: 9 },
-    { x: -12, y: 13 }, { x: -18, y: 0 }, { x: -10, y: -3 }, { x: -18, y: -10 },
-  ],
-};
+const MOVEMENT_MULTIPLIER = 0.1;   // scales the drift speed (with deltaTime)
+const REF = 72;                    // the base polygon's half-extent; `size` scales against it
+
+// Base rock outline (authored around a ±72 box), scaled per definition.
+const BASE_SHAPE = [
+  { x: 68, y: -51 }, { x: -3, y: -80 }, { x: -58, y: -51 }, { x: -71, y: 1 },
+  { x: -38, y: 62 }, { x: 4, y: 54 }, { x: 17, y: 34 }, { x: 33, y: 49 },
+  { x: 68, y: 26 }, { x: 72, y: -8 },
+];
 
 export default class Asteroid extends VectorGameObject {
-  constructor(gameSession, type, x, y) {
-    super(gameSession, x, y, SHAPES[type] || SHAPES.large, true, 1, false, 0, 1, 255);
+  constructor(gameSession, def = {}, x, y) {
+    const size = def.size ?? 60;
+    const sc = size / REF;
+    const verts = BASE_SHAPE.map((v) => ({ x: v.x * sc, y: v.y * sc }));
+    super(gameSession, x, y, verts, true, 2, false, 0, 1, 255);
 
-    this.__type = type;
-    const velMax = VELOCITY_MAX[type] ?? VELOCITY_MAX.large;
+    this.def = def;                                   // read by the manager on destruction
+    this.strokeColor = this.p5.color(def.color || '#8a8580');
 
-    // Random heading + speed (kept as a base vector; scaled per frame in update).
-    this.__movementVector = this.p5.createVector(
-      (Math.random() - 0.5) * velMax,
-      (Math.random() - 0.5) * velMax,
-    );
-    this.__rotationScale = Math.random() - 0.5;
-    this.__rotationSpeed = ROTATION_SPEED;
+    // Drift and spin are randomized per rock, each drawn from an authored [min,max] range
+    // (legacy single-value driftSpeed/spinSpeed migrate into the max). Drift = a random speed
+    // in the range along a random heading; spin = a random magnitude in the range, random dir.
+    const speed = rand(def.driftMin ?? 0, def.driftMax ?? def.driftSpeed ?? 1.5);
+    const heading = Math.random() * Math.PI * 2;
+    this.__movementVector = this.p5.createVector(Math.cos(heading) * speed, Math.sin(heading) * speed);
+    const spinMag = rand(def.spinMin ?? 0, def.spinMax ?? def.spinSpeed ?? 0.02);
+    this.__spin = spinMag * (Math.random() < 0.5 ? -1 : 1);   // rad/ms, random direction
     this.__deltaDistance = this.p5.createVector(0, 0);
+
+    // Beat pulse (same feel as a PulseObject): jump to pulseScale on each master beat, ease
+    // back toward rest by relax each frame. Applied via the object's scale.
+    this.__pulseScale = def.pulseScale ?? 1;
+    this.__relax = def.relax ?? 0.16;
+    this.__division = def.division ?? 1;   // pulses per master beat (subdivision, like the ship)
+    this.__pulse = 1;
+    this.__lastBeat = this._beatIndex();   // don't pulse on the very first frame
+  }
+
+  // What this rock spawns when destroyed (a prototype's bare name, or 'none') and the chance.
+  get spawns() { return this.def.spawns ?? 'none'; }
+  get spawnProbability() { return this.def.spawnProbability ?? 0; }
+
+  // Current pulse-beat index off the shared grid, subdivided by `division` (1 = on the master
+  // beat, 2 = eighths, 0.5 = every two beats) — the same subdivision the ship uses.
+  _beatIndex() {
+    const g = this.gameSession.rtdManager && this.gameSession.rtdManager.beatGrid;
+    if (!g || !g.masterInterval) return -Infinity;
+    const interval = g.masterInterval / Math.max(0.01, this.__division || 1);
+    const t = this.gameSession.timeManager.realTimeSinceStartup;
+    return Math.floor((t - g.epoch) / interval);
   }
 
   offScreen() {
@@ -57,28 +76,23 @@ export default class Asteroid extends VectorGameObject {
 
   // Returns false once the asteroid has drifted fully off-screen (despawn).
   update() {
+    const dt = this.gameSession.timeManager.deltaTime;
     this.__deltaDistance
       .set(this.__movementVector.x, this.__movementVector.y)
-      .mult(MOVEMENT_MULTIPLIER * this.gameSession.timeManager.deltaTime);
+      .mult(MOVEMENT_MULTIPLIER * dt);
     this.position.add(this.__deltaDistance);
+    this.rotation += this.__spin * dt;
 
-    this.rotation += (this.p5.PI / this.__rotationSpeed) * this.__rotationScale;
+    // Beat pulse: spike the scale on a new master beat, then relax back toward 1.
+    const b = this._beatIndex();
+    if (b > this.__lastBeat) { this.__lastBeat = b; this.__pulse = this.__pulseScale; }
+    this.__pulse += (1 - this.__pulse) * this.__relax;
+    this.scale = this.__pulse;
 
     return !this.offScreen();
-  }
-
-  // The size this asteroid splits into when destroyed ("none" = gone for good).
-  get nextType() {
-    switch (this.__type) {
-      case "large": return "medium";
-      case "medium": return "small";
-      default: return "none";
-    }
   }
 
   // Return the live position vector (not a copy) so update() can mutate it.
   get position() { return this.__position; }
   set position(position) { this.__position = position; }
-
-  get velocity() { return this.__movementVector; }   // alias for effects
 }

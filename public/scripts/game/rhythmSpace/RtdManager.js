@@ -17,6 +17,7 @@
 import Manager from "../../engine/Managers/Manager.js";
 import PulseObject from "./PulseObject.js";
 import Projectile from "./Projectile.js";
+import Asteroid from "./Asteroid.js";
 
 export default class RtdManager extends Manager {
   constructor(gameSession) {
@@ -125,7 +126,8 @@ export default class RtdManager extends Manager {
     const parked = [];
     for (let i = this.__objects.length - 1; i >= 0; i--) {
       if (this.__objects[i].isPrototype) continue;
-      parked.unshift(this._record(this.__objects[i]));
+      // serialize() omits the id — carry it so _parkedObjects keys each record uniquely.
+      parked.unshift({ ...this._record(this.__objects[i]), id: this.__objects[i].id });
       this.__objects.splice(i, 1);
     }
     this.__sceneStore.set(this.__activeSceneId, parked);
@@ -276,7 +278,7 @@ export default class RtdManager extends Manager {
   // deprecated kind. Lives in the global prototype library (OBJECTS mode).
   createPrototype(opts = {}) {
     const gs = this.gameSession;
-    return this.createObject({
+    const o = this.createObject({
       name: opts.name || 'prototype',
       isPrototype: true,
       kind: opts.kind || 'target',
@@ -286,6 +288,53 @@ export default class RtdManager extends Manager {
       bpm: 100,
       sound: 'none',
     });
+    this.layoutPrototypes();   // give the new prototype a slot and keep them all on screen
+    return o;
+  }
+
+  // Ensure every prototype is on screen in the object editor WITHOUT disturbing manual
+  // arrangement: a prototype already sitting on a clear on-screen spot keeps its X/Y (drag to
+  // organize — it sticks), and only off-screen or overlapping ones drop into the next free grid
+  // slot. Called when the object editor opens and when a prototype is created. Prototype X/Y is
+  // presentational, used ONLY in object mode (instances place themselves; asteroids spawn from
+  // properties), so this never affects gameplay.
+  layoutPrototypes() {
+    const gs = this.gameSession;
+    if (!gs.canvasWidth) return;
+    const protos = this.prototypes;
+    if (!protos.length) return;
+    const left = 90, top = 130, cell = 150;
+    const right = gs.canvasWidth - 330;   // clear the 300px editor panel
+    const cols = Math.max(1, Math.floor((right - left) / cell) + 1);
+    const onScreen = (o) => o.x >= 40 && o.x <= gs.canvasWidth - 300 && o.y >= 70 && o.y <= gs.canvasHeight - 20;
+    const near = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by) < cell * 0.6;
+
+    const placed = [];
+    const homeless = [];
+    for (const o of protos) {
+      if (onScreen(o) && !placed.some((q) => near(o.x, o.y, q.x, q.y))) placed.push(o);
+      else homeless.push(o);
+    }
+    let slot = 0;
+    for (const o of homeless) {
+      let x, y;
+      do {
+        x = left + (slot % cols) * cell;
+        y = top + Math.floor(slot / cols) * cell;
+        slot++;
+      } while (placed.some((q) => near(x, y, q.x, q.y)) && slot < cols * 200);
+      o.x = x; o.y = y;
+      placed.push(o);
+    }
+  }
+
+  // Remove and return a retained (deleted) prototype template of the given kind, or null.
+  // Used to restore an essential prototype (e.g. the ship) into the live library.
+  takeRetainedByKind(kind) {
+    const i = this.__retainedPrototypes.findIndex((r) => r.kind === kind);
+    if (i < 0) return null;
+    const [rec] = this.__retainedPrototypes.splice(i, 1);
+    return rec;
   }
 
   // Instances mirror their prototype's editable properties, pulled every frame so an
@@ -424,9 +473,10 @@ export default class RtdManager extends Manager {
   // Use a caller-supplied id (e.g. loaded from disk) or mint the next one,
   // keeping the sequence ahead of any adopted "obj-N" ids so future ones don't collide.
   _adoptId(id) {
-    if (id) {
-      const m = /^obj-(\d+)$/.exec(id);
-      if (m) this.__idSeq = Math.max(this.__idSeq, Number(m[1]));
+    // Only obj-N ids are valid; anything else (e.g. a legacy "undefined" key) gets a fresh one.
+    const m = id && /^obj-(\d+)$/.exec(id);
+    if (m) {
+      this.__idSeq = Math.max(this.__idSeq, Number(m[1]));
       return id;
     }
     return `obj-${++this.__idSeq}`;
@@ -450,10 +500,18 @@ export default class RtdManager extends Manager {
     return name;
   }
 
+  // The live ship to drive. Prefer a placed INSTANCE (the gameplay ship); fall back to a ship
+  // prototype only if no instance exists — a prototype is hidden in game/editor, so it must
+  // never win over an instance (see ensureGameShip, which spawns an instance when needed).
   _findShip() {
     const coll = this.objects;
-    for (let i = coll.length - 1; i >= 0; i--) if (coll[i].kind === 'ship') return coll[i];
-    return null;
+    let proto = null;
+    for (let i = coll.length - 1; i >= 0; i--) {
+      if (coll[i].kind !== 'ship') continue;
+      if (!coll[i].isPrototype) return coll[i];
+      if (!proto) proto = coll[i];
+    }
+    return proto;
   }
 
   // Persistable state: the GLOBAL prototypes (keyed by id), the retained prototype templates,
@@ -641,6 +699,44 @@ export default class RtdManager extends Manager {
     this.__previews = [new Projectile(gs, from, -Math.PI / 2, def)];   // straight up
   }
 
+  // ---- Per-feature effect previews (object editor "preview" buttons) ------
+  // Each plays one dynamic behaviour once, in the editor, without entering game mode.
+
+  // Pulse: force one throb on the selected object now (it eases back via relax).
+  previewPulse(o) {
+    if (o) o.__scale = o.pulseScale;
+  }
+
+  // Drift + spin + pulse: spawn one sample rock from an obstacle definition, drifting from
+  // lower-centre so its motion is visible. Removed when it drifts off-screen.
+  previewObstacle(o) {
+    if (!o || o.kind !== 'obstacle') return;
+    const gs = this.gameSession;
+    const from = { x: gs.canvasWidth / 2, y: gs.canvasHeight * 0.6 };
+    this.__previews = [new Asteroid(gs, this._obstacleDef(o), from.x, from.y)];
+  }
+
+  // Spawn-on-destroy: spawn one rock of the obstacle's `spawns` target, so you see what it
+  // drops. No-op for 'none' or an unresolvable target.
+  previewSpawn(o) {
+    if (!o || o.kind !== 'obstacle' || o.spawns === 'none') return;
+    const def = this.obstacleDef(o.spawns);
+    if (!def) return;
+    const gs = this.gameSession;
+    const from = { x: gs.canvasWidth / 2, y: gs.canvasHeight * 0.6 };
+    this.__previews = [new Asteroid(gs, def, from.x, from.y)];
+  }
+
+  // Sequencer 'fire' event: fire the object's projectile once from its position, as a preview
+  // (no collision/damage). Used by the sequencer's event preview when event is 'fire'.
+  previewLauncherFire(o) {
+    if (!o) return;
+    const gs = this.gameSession;
+    const def = this.projectileDef(o.projectile);
+    const origin = typeof o.worldOrigin === 'function' ? o.worldOrigin() : { x: o.x, y: o.y };
+    this.__previews = [new Projectile(gs, origin, -Math.PI / 2, { ...def, explodes: false, preview: true })];
+  }
+
   // The core metronome is the master clock: its bpm sets the grid tempo, and its
   // phaseOffset manually aligns the grid's phase (epoch) — slide it to lock the pulse
   // to a fixed music track. Authored in the 'objects' collection, so it drives
@@ -691,6 +787,33 @@ export default class RtdManager extends Manager {
       shape: p.shape, fill: p.fill, size: p.size, color: p.color, speed: p.speed,
       explodes: p.explodes, aoeRadius: p.aoeRadius, lifetime: p.lifetime,
       spinSpeed: p.spinSpeed, beatpulse: p.beatpulse,
+    };
+  }
+
+  // The obstacle (asteroid) prototypes — the templates the AsteroidManager builds waves from.
+  obstaclePrototypes() {
+    return this.__objects.filter((o) => o.kind === 'obstacle' && o.isPrototype);
+  }
+
+  // Plain asteroid definitions for wave spawning (one per obstacle prototype).
+  obstacleDefs() {
+    return this.obstaclePrototypes().map((o) => this._obstacleDef(o));
+  }
+
+  // Resolve an obstacle by its bare (prefix-free) name to a definition — the on-destroy
+  // `spawns` target. Prefers an obstacle prototype; null if the name resolves to nothing.
+  obstacleDef(name) {
+    const matches = this.__objects.filter((o) => o.kind === 'obstacle' && this._bareName(o.name) === name);
+    const o = matches.find((x) => x.isPrototype) || matches[0];
+    return o ? this._obstacleDef(o) : null;
+  }
+
+  _obstacleDef(o) {
+    return {
+      name: this._bareName(o.name), size: o.size, color: o.color,
+      driftMin: o.driftMin, driftMax: o.driftMax, spinMin: o.spinMin, spinMax: o.spinMax,
+      pulseScale: o.pulseScale, relax: o.relax, division: o.division,
+      spawns: o.spawns, spawnProbability: o.spawnProbability,
     };
   }
 
@@ -775,7 +898,7 @@ RtdManager.PROTO_PREFIX = 'p_';   // namespaces prototype names so instances can
 // instance got reset to the prototype's value by syncInstancesFromPrototypes each frame, so a
 // scene object's "spawn at launch" wouldn't stick. New instances still snapshot the prototype's
 // value at creation (createFromPrototype copies serialize()), then own it.
-RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectile', 'patternMeasures', 'patternSteps', 'attachPoint', 'lifespanPhrases', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse'];
+RtdManager.INHERITED = ['radius', 'color', 'bpm', 'pulseScale', 'relax', 'sound', 'behavior', 'volume', 'muted', 'division', 'phaseOffset', 'timeSignature', 'projectile', 'patternMeasures', 'patternSteps', 'event', 'granularity', 'attachPoint', 'lifespanPhrases', 'shape', 'fill', 'size', 'speed', 'explodes', 'aoeRadius', 'lifetime', 'spinSpeed', 'beatpulse', 'driftMin', 'driftMax', 'spinMin', 'spinMax', 'spawns', 'spawnProbability'];
 
 // Beats per bar from an "n/d" time-signature string (the numerator); 4 by default.
 RtdManager.beatsPerBar = (sig) => {
