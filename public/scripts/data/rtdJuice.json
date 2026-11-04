@@ -1,0 +1,103 @@
+{
+  "container": {
+    "cheats": {
+      "juiceFx": true,
+      "ship": {
+        "invincibility": true
+      },
+      "score": {
+        "pulse": false,
+        "pulseScale": 1.3,
+        "multiplier": 1,
+        "fontSize": 64,
+        "slotMachine": false
+      }
+    },
+    "sillyColors": {
+      "active": false,
+      "particleHue": 0
+    },
+    "music": {
+      "track": "media/music/100bpm_Echoes_In_Neon_Dreams.mp3",
+      "volume": -11,
+      "play": true
+    },
+    "projectileFire": {
+      "sound": {
+        "active": true,
+        "synth": "projectile",
+        "clip": "none",
+        "volume": -12,
+        "rate": 1
+      },
+      "shake": {
+        "active": false,
+        "xAxis": true,
+        "yAxis": true,
+        "amplitude": 0.25,
+        "frequency": 12,
+        "duration": 0.12,
+        "form": "simple",
+        "fade": false,
+        "inheritVelocity": false
+      }
+    },
+    "asteroidHit": {
+      "particles": {
+        "active": true,
+        "particleSystem": "asteroidHit"
+      },
+      "shake": {
+        "active": true,
+        "xAxis": true,
+        "yAxis": true,
+        "amplitude": 0.04,
+        "frequency": 10,
+        "duration": 0.4,
+        "form": "noise",
+        "fade": "exponential",
+        "inheritVelocity": false
+      },
+      "sound": {
+        "active": true,
+        "synth": "explosion",
+        "clip": "none",
+        "volume": -6,
+        "rate": 1
+      }
+    }
+  },
+  "particleSystems": {
+    "particleTest": {
+      "vectorParticle": {
+        "shape": "circle",
+        "count": 15,
+        "size": 10,
+        "pattern": "radial",
+        "rotation": "random",
+        "rotationSpeed": 5,
+        "particleLife": 2,
+        "initialVelocityRandom": false,
+        "initialVelocity": 30,
+        "fade": true,
+        "followObject": false
+      }
+    },
+    "asteroidHit": {
+      "vectorParticle": {
+        "shape": "triangle",
+        "count": 18,
+        "size": 12,
+        "pattern": "radial",
+        "rotation": "random",
+        "rotationSpeed": 5,
+        "particleLife": 1.5,
+        "initialVelocityRandom": true,
+        "initialVelocity": 45,
+        "fade": true,
+        "followObject": false,
+        "inheritVelocity": false
+      }
+    }
+  }
+}

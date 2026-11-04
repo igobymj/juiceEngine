@@ -10,7 +10,7 @@
  * the p5 instance, canvas element, and dimensions onto its session(s).
  */
 export default function bootSketch(getActive, config = {}) {
-  const { parent = 'canvas', frameRate = 60, pointerGuard, onSetup, onResize } = config;
+  const { parent = 'canvas', frameRate = 60, pointerGuard, onSetup, onResize, maxBackingDim = 1600 } = config;
 
   const sketch = function (p) {
     const dims = () => {
@@ -18,8 +18,19 @@ export default function bootSketch(getActive, config = {}) {
       return [el.clientWidth, el.clientHeight];
     };
 
+    // Pixel density that keeps the canvas backing store's longest side <= maxBackingDim.
+    // A large animated 2D canvas judders because the GPU/compositor can't present that
+    // many pixels each frame — a cost the JS-side FPS can't see (rAF still fires at
+    // 16.7ms). Capping the backing store bounds that cost so the frame rate holds no
+    // matter how big the window gets. Density is a fractional pixelDensity, so ALL
+    // coordinates (drawing, mouse, UI hit-tests) stay in CSS pixels — only the render
+    // resolution drops, and CSS upscales the smaller buffer to fill the window. Never
+    // above 1 (avoids the 4x Retina buffer). Trade-off: marginally softer on a big window.
+    const densityFor = (w, h) => Math.min(1, maxBackingDim / Math.max(w, h, 1));
+
     p.setup = function () {
       const [w, h] = dims();
+      p.pixelDensity(densityFor(w, h));
       const canvas = p.createCanvas(w, h);
       canvas.parent(parent);
       p.frameRate(frameRate);
@@ -47,10 +58,11 @@ export default function bootSketch(getActive, config = {}) {
     };
     p.mouseDragged = function () { const gs = getActive(); if (gs) gs.inputManager.mouseDragged(p.mouseX, p.mouseY); };
     p.mouseReleased = function () { const gs = getActive(); if (gs) gs.inputManager.mouseReleased(); };
-    p.keyPressed = function () { const gs = getActive(); if (gs) gs.inputManager.keyInput(p.key); };
+    p.keyPressed = function (e) { const gs = getActive(); if (gs) gs.inputManager.keyInput(p.key, e && e.code); };
 
     p.windowResized = function () {
       const [w, h] = dims();
+      p.pixelDensity(densityFor(w, h));   // re-cap the backing store for the new size
       p.resizeCanvas(w, h);
       if (onResize) onResize(p, w, h);
     };

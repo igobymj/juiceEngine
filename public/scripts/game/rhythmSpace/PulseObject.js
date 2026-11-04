@@ -1,0 +1,767 @@
+/*
+ * PulseObject — a rhythm element for RTD: it pulses on the beat and plays a
+ * sound at the moment of each pulse.
+ *
+ * Three visual kinds share the exact same beat/pulse/edit behaviour:
+ *   'circle'    — a filled circle (the kick-circle).
+ *   'ship'      — imported SVG artwork (a set of VectorGameObjects, from the SVG
+ *                 import pathway) that scales as one about its centre.
+ *   'metronome' — a filled circle like the kick-circle, but shown only as a beat
+ *                 reference in the juice editor (RtdManager hides it in game play);
+ *                 it mirrors the ship's default parameters.
+ * Because all three are just PulseObjects, the RTD editor tunes any one the same
+ * way. It carries its own editable "type" parameters (radius, color, tempo, how
+ * big the pulse is, how fast it relaxes, which sound). Timing runs off the
+ * unscaled realTimeSinceStartup clock so the beat stays steady.
+ */
+
+import { runBehaviorOnBeat, runBehaviorOnDownbeat, fireProjectile } from "./behaviors.js";
+
+export default class PulseObject {
+  constructor(gameSession, opts = {}) {
+    this.gameSession = gameSession;
+    this.x = opts.x ?? 0;
+    this.y = opts.y ?? 0;
+
+    this.id = opts.id ?? null;                     // stable instance id, assigned by the manager
+    this.name = opts.name ?? null;                 // unique display name, assigned/uniquified by the manager
+    this.isPrototype = opts.isPrototype ?? false;  // a template other objects are created from
+    this.prototypeId = opts.prototypeId ?? null;   // id of the prototype this was cloned from (for live sync)
+    // Inherited-property keys this instance overrides: it keeps its own value for
+    // these instead of pulling them from its prototype each frame (see
+    // RtdManager.INHERITED / syncInstancesFromPrototypes). Lets instances diverge —
+    // e.g. per-instance volume in a mix. A map of { key: true }.
+    this.overrides = { ...(opts.overrides || {}) };
+
+    // 'circle' (default kick-circle), 'ship' (imported SVG vector shapes), 'metronome'
+    // (a circle shown only in the editor — see RtdManager), 'drumKick' (a circle synth
+    // drum) or 'downbeatLauncher' (a rectangle). Ship and metronome share the ship defaults.
+    this.kind = PulseObject.MIGRATE_KIND[opts.kind] || opts.kind || 'circle';
+    // The object's high-level type (launcher | projectile | metronome | ship | target |
+    // pickup | obstacle | trigger). Set/changed via the editor's type dropdown, which also
+    // updates `kind`. Derived from kind for objects saved before the type field existed.
+    // ('drum' — the old kick-circle/drumKick sound objects — is deprecated but still loads.)
+    this.type = opts.type ?? PulseObject.KIND_TYPE[this.kind] ?? this.kind;
+    const shipLike = this.kind === 'ship' || this.kind === 'metronome';
+    this.label = opts.label ?? (this.kind === 'ship' ? 'spaceship' : this.kind === 'metronome' ? 'metronome' : this.kind === 'drumKick' ? 'drum kick' : this.kind === 'downbeatLauncher' ? 'downbeat launcher' : this.kind === 'fourMeasureLauncher' ? 'four measure launcher' : 'kick-circle');
+    this.shapes = opts.shapes ?? null;   // VectorGameObject[] — required for kind 'ship'
+    this.svg = opts.svg ?? null;         // source path for a 'ship', so it can be re-imported on load
+    this.rotation = opts.rotation ?? 0;  // radians; a transform children inherit
+    // Child objects that inherit this object's full transform (position, rotation,
+    // scale/pulse). Each is { shapes: VectorGameObject[] } in this object's local
+    // frame — e.g. the ship's exhaust flame. Rebuilt with the parent, not persisted.
+    this.children = opts.children ?? [];
+
+    // --- editable type parameters ---
+    // For a ship, radius is the "size": radius === SHIP_REF_RADIUS renders the
+    // artwork at its imported size, and it drives the hit test + selection ring.
+    // A metronome takes the ship's defaults but uses radius as a plain circle radius.
+    this.radius = opts.radius ?? (shipLike ? PulseObject.SHIP_REF_RADIUS : 60);
+    this.color = opts.color ?? (shipLike ? '#cfc7e6' : PulseObject.KIND_COLOR[this.kind] ?? '#8b7bd8');
+    // A downbeatLauncher is an arbitrary quadrilateral: four corner vertices as offsets from
+    // the object's (x,y), each independently draggable by its handle. Defaults to a
+    // rectangle (and migrates an older width/height launcher to rect verts). Per-object like
+    // position — not inherited; other kinds ignore this.
+    this.verts = (opts.verts && opts.verts.length === 4)
+      ? opts.verts.map((v) => ({ x: v.x, y: v.y }))
+      : PulseObject.rectVerts(opts.width ?? 120, opts.height ?? 60);
+    this.bpm = opts.bpm ?? 100;              // pulse tempo
+    this.pulseScale = opts.pulseScale ?? 1.6; // scale reached at the moment of a beat
+    this.relax = opts.relax ?? 0.16;          // ease-back per frame toward rest (0..1)
+    this.sound = opts.sound ?? 'kick';        // registered sound name to play on beat
+    this.behavior = opts.behavior ?? 'none';  // attached behaviour name (see behaviors.js)
+    // Launcher firing (quad kinds): a reference (by name) to the projectile prototype it
+    // fires, plus an editable trigger pattern (an N-measure phrase of eighth-note steps,
+    // stored as active step indices). The launcher kinds are presets: downbeatLauncher fires
+    // the fast 'projectile' preset on step 0 of a 1-measure phrase; fourMeasureLauncher fires
+    // the exploding 'burst' preset on step 0 of a 4-measure phrase. Migrates legacy preset
+    // refs — 'bullet' → 'projectile' (fast), 'shell' → 'burst' (AOE).
+    const projRef = opts.projectile ?? opts.projectileType ?? (this.kind === 'fourMeasureLauncher' ? 'burst' : 'projectile');
+    this.projectile = projRef === 'bullet' ? 'projectile' : projRef === 'shell' ? 'burst' : projRef;
+    this.patternMeasures = opts.patternMeasures ?? (this.kind === 'fourMeasureLauncher' ? 4 : 1);
+    this.patternSteps = Array.isArray(opts.patternSteps) ? [...opts.patternSteps] : [0];
+    // What the sequencer pattern triggers on an active step: 'fire' (launch a projectile — the
+    // original behaviour) or 'pulse' (throb the object's scale on the pattern instead of on the
+    // fixed subdivision). An experiment: driving pulses from the step sequencer.
+    this.event = opts.event ?? 'fire';
+    // Sequencer step resolution: steps per quarter-note beat — 1 = quarter, 2 = eighth
+    // (default, the original grid), 4 = sixteenth. Sets the step clock and the sequencer grid.
+    this.granularity = opts.granularity ?? 2;
+    // Which ship grab point this launcher attaches to when collected: nose | left | right.
+    this.attachPoint = opts.attachPoint ?? 'nose';
+    // Lifespan for a SIDE (left/right) attachment, counted in the launcher's pattern
+    // phrases; it fades to transparent linearly over this span, then is consumed. A NOSE
+    // attachment ignores this — it lasts forever.
+    this.lifespanPhrases = opts.lifespanPhrases ?? 4;
+
+    // Projectile-definition params (kind 'projectile'), appearance borrowed from the
+    // particle system. `rotation` is the object transform, so the spin animation is
+    // spinSpeed; aoeRadius is the blast radius (also the legacy launcher field name).
+    this.shape = opts.shape ?? 'circle';      // circle | square | triangle | line
+    this.fill = opts.fill ?? true;            // filled vs outline
+    this.size = opts.size ?? 8;               // half-extent (px)
+    this.speed = opts.speed ?? 0.6;           // px/ms in flight
+    this.explodes = opts.explodes ?? false;   // AOE blast on impact / at end of range
+    this.lifetime = opts.lifetime ?? 1500;    // ms of flight
+    this.spinSpeed = opts.spinSpeed ?? 0;     // rotation animation (rad/ms)
+    this.beatpulse = opts.beatpulse ?? 0;     // 0..1: 0=no pulse, 0.5=firing launcher's pulse, 1=double
+    this.aoeRadius = opts.aoeRadius ?? 90;
+    this.volume = opts.volume ?? -6;          // per-object playback level (dB)
+    this.muted = opts.muted ?? false;         // when true, pulses visually but plays no sound
+    // Subdivision: how many times this object fires per master beat. 1 = on each
+    // beat, 2 = eighths, 3 = triplets, 0.5 = every 2 beats. The object's interval is
+    // the master interval divided by this, so every object stays a rational multiple
+    // of the metronome and locks to the shared grid by construction.
+    this.division = opts.division ?? 1;
+    // Phase offset as a signed fraction of the object's own (subdivided) interval
+    // (-0.5..0.5): negative anticipates the beat (fires early), positive lags it
+    // (fires late), ±0.5 is maximally off-beat — all while staying grid-locked. Held
+    // as a fraction, not ms, so it keeps its meaning across tempo changes.
+    this.phaseOffset = opts.phaseOffset ?? 0;
+    // Time signature (metronome only): sets the bar length, so the "downbeat" is beat 1
+    // of every bar. Stored as an "n/d" string; only the numerator (beats per bar) is
+    // used for now. Published to the grid by RtdManager._publishGrid.
+    this.timeSignature = opts.timeSignature ?? '4/4';
+    // When true, this object appears in GAME mode only after the music launches (the beat
+    // drop); before launch it's hidden and inert. Editor mode ignores it (always present).
+    this.spawnAtLaunch = opts.spawnAtLaunch ?? false;
+
+    // Obstacle-definition params (kind 'obstacle' — an authorable asteroid). The AsteroidManager
+    // spawns drifting rocks from this template. Drift velocity and tumble spin are RANDOMIZED per
+    // rock, each drawn from a [min,max] range (emulating the original per-size velocity spread);
+    // legacy single-value driftSpeed/spinSpeed migrate into the max. On destruction it spawns the
+    // prototype named `spawns` (bare name, or 'none') at `spawnProbability` (0..1). Appearance
+    // reuses size (scale) + color.
+    this.driftMin = opts.driftMin ?? 0;
+    this.driftMax = opts.driftMax ?? opts.driftSpeed ?? 1.5;
+    this.spinMin = opts.spinMin ?? 0;
+    this.spinMax = opts.spinMax ?? opts.spinSpeed ?? 0.02;
+    this.spawns = opts.spawns ?? 'none';
+    this.spawnProbability = opts.spawnProbability ?? 0;
+
+    // --- runtime state ---
+    this.__scale = 1;
+    this.selected = false;
+    this.__attachedShip = null;   // set when a quad launcher is collected by the ship (game mode); it then rides on the ship
+    this.__attachSlot = null;     // which ship grab point (index into SHIP_ATTACH_POINTS) it rides on
+    this.__alpha = 1;             // render opacity — fades over a side launcher's lifespan
+    this.__attachTime = null;     // realtime (ms) it was collected — the lifespan clock
+    this.__expired = false;       // consumed this round (lifespan ran out); hidden until reset
+    // Beat clocks start locked to the grid so the first pulse lands on the next grid
+    // beat, not an off-grid one at creation/load. __lastVisualBeat drives the (frame-
+    // accurate) visual pulse; __scheduledThrough is how far ahead the audio has been
+    // scheduled on the sample-accurate audio clock (see update / _scheduleAudio).
+    const t0 = this.gameSession.timeManager.realTimeSinceStartup;
+    this.__lastVisualBeat = this._beatAt(t0);
+    this.__lastStep = this._stepAt(t0);   // step clock at the object's granularity (downbeats + sequencer patterns)
+    this.__scheduledThrough = t0;
+  }
+
+  // Beat interval in ms from this object's own bpm. Only the master metronome uses
+  // it (RtdManager publishes it as the grid's masterInterval); synced objects derive
+  // their interval from the grid instead — see _beatAt.
+  get interval() { return 60000 / Math.max(1, this.bpm); }
+
+  // The shared beat grid published by RtdManager: { epoch, masterInterval }. The
+  // master metronome drives masterInterval (its bpm) and epoch (its phaseOffset, the
+  // grid's manual phase alignment). Falls back to a 100bpm grid on phase 0 if no
+  // manager is wired yet.
+  _grid() {
+    const g = this.gameSession.rtdManager && this.gameSession.rtdManager.beatGrid;
+    return g || { epoch: 0, masterInterval: 600 };
+  }
+
+  // The most recent grid beat at or before time t. The object's interval is the
+  // master interval divided by its subdivision, and phaseOffset shifts it within
+  // that interval — so every object lands on a common grid, guaranteeing lock.
+  // The master metronome defines the grid's phase (its phaseOffset already drives
+  // grid.epoch), so it sits on the downbeat with no additional personal offset.
+  _beatAt(t) {
+    const grid = this._grid();
+    const interval = grid.masterInterval / Math.max(0.01, this.division);
+    const off = this.kind === 'metronome' ? 0 : this.phaseOffset;
+    const anchor = grid.epoch + off * interval;
+    return anchor + Math.floor((t - anchor) / interval) * interval;
+  }
+
+  // The step index at time t, counted from barOrigin — the beat the music dropped on, so its
+  // step 0 is measure 1's downbeat (falls back to the grid epoch before any drop). A step is a
+  // master beat divided by `granularity` (1 = quarter, 2 = eighth, 4 = sixteenth). Drives the
+  // bar-downbeat behaviours and each object's editable sequencer pattern.
+  _stepAt(t) {
+    const grid = this._grid();
+    const origin = grid.barOrigin != null ? grid.barOrigin : grid.epoch;
+    const stepInterval = grid.masterInterval / Math.max(1, this.granularity);
+    return Math.floor((t - origin) / stepInterval);
+  }
+
+  // Steps per bar = beats per bar × granularity (steps per beat).
+  _stepsPerBar() {
+    const grid = this._grid();
+    return Math.max(1, grid.beatsPerBar || 4) * Math.max(1, this.granularity);
+  }
+
+  update() {
+    const t = this.gameSession.timeManager.realTimeSinceStartup;
+
+    // Audio: schedule any beats in the lookahead window at their exact audio-clock
+    // time, so the sound is sample-accurate instead of quantised to the frame it's
+    // detected on (which added up to ~one frame of jitter).
+    this._scheduleAudio(t);
+
+    // Visual: pulse the scale on the frame a beat is reached. A sub-frame visual lag
+    // behind the (sample-accurate) sound is imperceptible, so this stays frame-driven.
+    // Deriving the beat from the grid each frame keeps same-tempo objects locked no
+    // matter when each was made, and collapses a long gap (backgrounded tab) to one
+    // pulse instead of a burst.
+    const beat = this._beatAt(t);
+    if (beat > this.__lastVisualBeat) {
+      this.__lastVisualBeat = beat;
+      if (this.event !== 'pulse') this.__scale = this.pulseScale;   // a 'pulse' event throbs on the sequencer steps instead of the subdivision
+      this._onBeat();
+    }
+
+    // The eighth-note step grid drives the bar-downbeat behaviours and each launcher's trigger
+    // pattern, independently of the object's own subdivision. Detect the newest step only,
+    // so a lagged frame collapses to one event rather than a catch-up burst.
+    const step = this._stepAt(t);
+    if (step > this.__lastStep) {
+      this.__lastStep = step;
+      this._onStep(step);
+    }
+
+    // Ease the scale back toward its rest size of 1.
+    this.__scale += (1 - this.__scale) * this.relax;
+
+    this._tickLifespan(t);
+  }
+
+  // A SIDE-attached launcher (left/right) fades to transparent linearly over its lifespan
+  // (lifespanPhrases of its pattern-phrases from when it was collected), then is consumed —
+  // detached and hidden for the round. A nose attachment (or anything unattached) is opaque
+  // and never expires.
+  _tickLifespan(t) {
+    if (this.__expired) return;
+    if (!this.__attachedShip || !this.isQuad() || this.__attachSlot === 0) { this.__alpha = 1; return; }   // slot 0 = nose = infinite
+    const grid = this._grid();
+    const phraseMs = Math.max(1, this.patternMeasures) * this._stepsPerBar() * (grid.masterInterval / Math.max(1, this.granularity));
+    const lifeMs = Math.max(1, this.lifespanPhrases) * phraseMs;
+    const elapsed = t - (this.__attachTime ?? t);
+    const p = Math.min(1, Math.max(0, elapsed / lifeMs));
+    this.__alpha = 1 - p;
+    if (p >= 1) { this.__expired = true; this.__attachedShip = null; this.__attachSlot = null; this.__alpha = 0; }
+  }
+
+  // On the object's own (subdivided) beat: run whatever beat-driven behaviour is attached.
+  _onBeat() {
+    if (this.behavior && this.behavior !== 'none') runBehaviorOnBeat(this);
+  }
+
+  // On each eighth-note step: fire downbeat behaviours on bar beat 1, and fire a collected
+  // launcher whenever the step lands on an active cell of its trigger pattern (phrase-wrapped
+  // over patternMeasures). The behaviour guard avoids a double shot when the redundant
+  // 'fire-on-downbeat' behaviour is also assigned to a launcher.
+  _onStep(step) {
+    const stepsPerBar = this._stepsPerBar();
+    if (step % stepsPerBar === 0 && this.behavior && this.behavior !== 'none') runBehaviorOnDownbeat(this);
+    if (this.behavior === 'fire-on-downbeat') return;   // its own downbeat handler already fired
+    // Active sequencer step → trigger the object's event. 'pulse' throbs the scale (no ship
+    // needed); 'fire' launches the projectile (a collected quad launcher, as before).
+    const phraseLen = Math.max(1, this.patternMeasures) * stepsPerBar;
+    const local = ((step % phraseLen) + phraseLen) % phraseLen;
+    if (!this.patternSteps.includes(local)) return;
+    if (this.event === 'pulse') { this.__scale = this.pulseScale; return; }
+    if (this.isQuad() && this.__attachedShip) this._fireLauncher();
+  }
+
+  // Fire the launcher's attached projectile from its current position.
+  _fireLauncher() {
+    fireProjectile(this, this.gameSession);
+  }
+
+  // Pre-schedule every grid beat that falls within the lookahead window at its exact
+  // audio-clock time. __scheduledThrough is a realTimeSinceStartup watermark of how
+  // far ahead we've scheduled, so beats are enqueued exactly once. A stalled frame
+  // (e.g. a backgrounded tab) is collapsed to "now", never a catch-up burst.
+  // Whether mute currently silences this object. Mute is an AUTHORING aid — it takes effect
+  // only in editor/objects mode. In real game play mute is ignored (the object plays); use
+  // the per-object volume to quiet it in the actual mix.
+  _muteActive() {
+    if (!this.muted) return false;
+    const rtd = this.gameSession && this.gameSession.rtdManager;
+    return !rtd || rtd.mode !== 'game';
+  }
+
+  _scheduleAudio(t) {
+    // A quad launcher isn't a per-beat drum (it sounds when it fires, see playSoundNow), and a
+    // projectile definition is a silent template — neither does per-beat scheduling.
+    if (this.isQuad() || this.kind === 'projectile' || this.kind === 'obstacle') return;
+    const grid = this._grid();
+    const interval = grid.masterInterval / Math.max(0.01, this.division);
+    const off = this.kind === 'metronome' ? 0 : this.phaseOffset;
+    const anchor = grid.epoch + off * interval;
+    const horizon = t + PulseObject.LOOKAHEAD_MS;
+    const from = Math.max(this.__scheduledThrough, t);   // never schedule past beats
+    // First grid beat strictly after `from`.
+    let beat = anchor + Math.ceil((from - anchor) / interval) * interval;
+    if (beat <= from) beat += interval;
+
+    const audible = !this._muteActive() && this.sound && this.sound !== 'none';
+    const snd = audible && this.gameSession.soundManager.getSound(this.sound);
+    const now = window.Tone ? Tone.now() : 0;
+    while (beat <= horizon) {
+      // Translate the grid time (ms, realTimeSinceStartup) into an audio-clock time.
+      if (snd && typeof snd.play === 'function') snd.play({ volume: this.volume, at: now + (beat - t) / 1000 });
+      beat += interval;
+    }
+    this.__scheduledThrough = horizon;
+  }
+
+  // Play the object's selected sound immediately (honouring mute/volume). Used for an
+  // event-driven shot — the downbeat launcher — so the sound syncs with the (frame-detected)
+  // fire, rather than the sample-accurate per-beat scheduling in _scheduleAudio.
+  playSoundNow() {
+    if (this._muteActive() || !this.sound || this.sound === 'none') return;
+    const snd = this.gameSession.soundManager.getSound(this.sound);
+    if (snd && typeof snd.play === 'function') {
+      snd.play({ volume: this.volume, at: window.Tone ? Tone.now() : 0 });
+    }
+  }
+
+  // The quad-launcher kinds: a free quadrilateral edited by corner handles, collected by the
+  // ship, and firing on the beat/measure. They share all shape/edit/collect behaviour and
+  // differ only in firing cadence and projectile (see _onDownbeat).
+  isQuad() { return this.kind === 'downbeatLauncher' || this.kind === 'fourMeasureLauncher'; }
+
+  render() {
+    if (this.kind === 'ship') this.renderShip();
+    else if (this.isQuad()) this.renderQuad();
+    else if (this.kind === 'metronome') this.renderMetronome();
+    else if (this.kind === 'projectile') this.renderProjectilePreview();
+    else if (this.kind === 'obstacle') this.renderObstacle();
+    else this.renderCircle();
+    this.renderSelection();
+  }
+
+  // An obstacle definition (asteroid) shows as a static rock outline scaled by `size`,
+  // so the authored template reads as the rock the AsteroidManager will spawn.
+  renderObstacle() {
+    const p = this.gameSession.p5;
+    const s = (this.size || 20) / PulseObject.OBSTACLE_REF * this.__scale;
+    p.push();
+    p.translate(this.x, this.y);
+    p.scale(s);
+    const col = p.color(this.color);
+    p.noFill();
+    p.stroke(col);
+    p.strokeWeight(2 / Math.max(0.001, s));
+    p.beginShape();
+    for (const v of PulseObject.OBSTACLE_SHAPE) p.vertex(v.x, v.y);
+    p.endShape(p.CLOSE);
+    p.pop();
+  }
+
+  // A projectile definition shows as a static preview of its shape/fill/size/color where
+  // it's authored (its position is meaningless — it's a template a launcher fires copies of).
+  renderProjectilePreview() {
+    const p = this.gameSession.p5;
+    const c = p.color(this.color);
+    p.push();
+    p.translate(this.x, this.y);
+    if (this.fill) { p.noStroke(); p.fill(c); } else { p.noFill(); p.stroke(c); p.strokeWeight(2); }
+    if (this.shape === 'circle') {
+      p.ellipse(0, 0, this.size * 2);
+    } else {
+      const v = PulseObject.projectileShapeVerts(this.shape, this.size);
+      p.beginShape();
+      for (const pt of v) p.vertex(pt.x, pt.y);
+      if (this.shape !== 'line') p.endShape(p.CLOSE); else p.endShape();
+    }
+    p.pop();
+  }
+
+  renderCircle() {
+    const p = this.gameSession.p5;
+    const d = this.radius * 2 * this.__scale;
+    p.push();
+    p.noStroke();
+    p.fill(this.color);
+    p.circle(this.x, this.y, d);
+    p.pop();
+  }
+
+  // An iconic metronome: a trapezoid case (wide base, narrow top) with a pendulum that
+  // reaches an extreme on each beat and crosses centre between beats — so it visibly
+  // ticks the tempo — while the whole icon still pulses via __scale like every kind.
+  renderMetronome() {
+    const p = this.gameSession.p5;
+    const r = this.radius;
+    const grid = this._grid();
+    const t = this.gameSession.timeManager.realTimeSinceStartup;
+    const beats = grid.masterInterval > 0 ? (t - grid.epoch) / grid.masterInterval : 0;
+    const swing = 0.5 * Math.cos(Math.PI * beats);   // ±0.5 rad; extreme on the beat, centre between
+
+    const pivot = { x: 0, y: 0.55 * r };
+    const L = 1.4 * r;                                // pendulum length
+    const tip = { x: pivot.x + L * Math.sin(swing), y: pivot.y - L * Math.cos(swing) };
+    const bob = { x: pivot.x + 0.62 * L * Math.sin(swing), y: pivot.y - 0.62 * L * Math.cos(swing) };
+
+    p.push();
+    p.translate(this.x, this.y);
+    p.scale(this.__scale);
+
+    // case
+    p.noStroke();
+    p.fill(this.color);
+    p.beginShape();
+    p.vertex(-0.68 * r, 0.9 * r);
+    p.vertex(0.68 * r, 0.9 * r);
+    p.vertex(0.26 * r, -0.95 * r);
+    p.vertex(-0.26 * r, -0.95 * r);
+    p.endShape(p.CLOSE);
+
+    // pendulum rod, bob and pivot (dark, so they read against the case)
+    p.stroke(20, 18, 28);
+    p.strokeWeight(Math.max(1, 0.07 * r));
+    p.line(pivot.x, pivot.y, tip.x, tip.y);
+    p.noStroke();
+    p.fill(20, 18, 28);
+    p.push();
+    p.translate(bob.x, bob.y);
+    p.rotate(swing);
+    p.rectMode(p.CENTER);
+    p.rect(0, 0, 0.34 * r, 0.22 * r);   // sliding weight
+    p.pop();
+    p.circle(pivot.x, pivot.y, 0.16 * r);
+
+    p.pop();
+  }
+
+  // A filled quadrilateral through the four corner verts (offsets from x,y), pulsing
+  // about (x,y) like the other kinds. Its shape is edited via the corner handles.
+  renderQuad() {
+    const p = this.gameSession.p5;
+    const sc = this.__scale;
+    // Once collected, the launcher rides on its assigned ship grab point (rotating with the
+    // ship) — attached by its centroid, so the verts are drawn relative to that centre.
+    // Otherwise it sits at its own position with verts offset from (x,y).
+    let bx = this.x, by = this.y, rot = 0, cx = 0, cy = 0;
+    if (this.__attachedShip) {
+      const pts = PulseObject.shipAttachPoints(this.__attachedShip);
+      const gp = pts[this.__attachSlot] || pts[0];
+      bx = gp.x; by = gp.y; rot = this.__attachedShip.rotation;
+      const ct = this.vertCentroid(); cx = ct.x; cy = ct.y;
+    }
+    const c = Math.cos(rot), s = Math.sin(rot);
+    const col = p.color(this.color);
+    col.setAlpha(255 * this.__alpha);   // side launchers fade over their lifespan
+    p.push();
+    p.noStroke();
+    p.fill(col);
+    p.beginShape();
+    for (const v of this.verts) {
+      const vx = (v.x - cx) * sc, vy = (v.y - cy) * sc;
+      p.vertex(bx + vx * c - vy * s, by + vx * s + vy * c);
+    }
+    p.endShape(p.CLOSE);
+    p.pop();
+  }
+
+  // The four rest-size (unscaled) corner points of a downbeatLauncher, in world space.
+  corners() {
+    return this.verts.map((v) => ({ x: this.x + v.x, y: this.y + v.y }));
+  }
+
+  // Move the origin (x,y) to the centroid of the verts, shifting the verts to
+  // compensate so the shape doesn't move on screen. After reshaping, the origin can
+  // drift far from the middle; re-centring makes the quad attach/pulse about its centre.
+  recenterVerts() {
+    const n = this.verts.length;
+    if (!n) return;
+    let cx = 0, cy = 0;
+    for (const v of this.verts) { cx += v.x; cy += v.y; }
+    cx /= n; cy /= n;
+    this.x += cx; this.y += cy;
+    for (const v of this.verts) { v.x -= cx; v.y -= cy; }
+  }
+
+  // Index of the corner handle under (x,y) for this (selected) downbeatLauncher, or -1.
+  cornerHandleAt(x, y) {
+    if (!this.isQuad() || !this.selected) return -1;
+    const r = PulseObject.HANDLE_HIT;
+    const cs = this.corners();
+    for (let i = 0; i < cs.length; i++) {
+      if (Math.abs(x - cs[i].x) <= r && Math.abs(y - cs[i].y) <= r) return i;
+    }
+    return -1;
+  }
+
+  // Drive the imported ship shapes as one: they share the ship's position and a
+  // single scale, so pulsing the scale zooms the whole ship about its centre.
+  // radius scales the artwork (radius === SHIP_REF_RADIUS === imported size).
+  // Children (e.g. the exhaust flame) share the same transform, so they track the
+  // ship's position, rotation and pulse. They're drawn first, behind the ship.
+  renderShip() {
+    const p = this.gameSession.p5;
+    const col = p.color(this.color);
+    const s = this.__scale * (this.radius / PulseObject.SHIP_REF_RADIUS);
+    // Children inherit the ship transform. A 'blink' child (the flame) is animated
+    // solely by toggling its visibility rapidly — never scaled or translated, so
+    // it stays fixed below the nozzle.
+    for (const child of this.children) {
+      if (child.blink && !this._blinkOn()) continue;
+      this._drawShapes(child.shapes, s, col);
+    }
+    this._drawShapes(this.shapes, s, col);
+    this._renderAttachMarkers();
+  }
+
+  // Small translucent dots marking the ship's grab points (nose + fins), so their
+  // placement is visible while tuning. A collected launcher sits on top of one of them.
+  _renderAttachMarkers() {
+    const p = this.gameSession.p5;
+    const d = Math.max(6, this.radius * 0.12);
+    p.push();
+    p.noStroke();
+    p.fill(255, 255, 255, 90);
+    for (const pt of PulseObject.shipAttachPoints(this)) p.circle(pt.x, pt.y, d);
+    p.pop();
+  }
+
+  // Rapid on/off blink for the flame — visibility only. A fast base rate plus a
+  // little jitter reads as a flickering exhaust; mostly lit, with quick offs.
+  _blinkOn() {
+    const t = this.gameSession.timeManager.realTimeSinceStartup;   // ms
+    return Math.sin(t * 0.075) + (Math.random() - 0.5) * 0.6 > -0.2;
+  }
+
+  // Apply this object's transform (position, rotation, scale) and stroke to a set
+  // of vector shapes, then render them. Shapes are authored in the ship's local
+  // frame, so one shared transform keeps everything aligned.
+  _drawShapes(shapes, s, col) {
+    if (!shapes) return;
+    for (const o of shapes) {
+      o.x = this.x;
+      o.y = this.y;
+      o.rotation = this.rotation;
+      o.scale = s;
+      o.strokeColor = col;
+      o.render();
+    }
+  }
+
+  renderSelection() {
+    if (!this.selected) return;
+    const p = this.gameSession.p5;
+    if (this.isQuad()) { this._renderResizeHandles(p); return; }
+    const r = this.kind === 'projectile' ? Math.max(10, this.size) : this.radius;
+    p.push();
+    p.noFill();
+    p.stroke(255, 255, 255, 180);
+    p.strokeWeight(1.5);
+    p.circle(this.x, this.y, r * 2 + 14);
+    p.pop();
+  }
+
+  // The quad outline plus a draggable handle at each corner (rest, unscaled size). Each
+  // handle moves just its own vertex, so any quadrilateral can be made (see RtdManager).
+  _renderResizeHandles(p) {
+    const cs = this.corners();
+    p.push();
+    p.noFill();
+    p.stroke(255, 255, 255, 180);
+    p.strokeWeight(1);
+    p.beginShape();
+    for (const c of cs) p.vertex(c.x, c.y);
+    p.endShape(p.CLOSE);
+    p.rectMode(p.CENTER);
+    p.noStroke();
+    p.fill(255);
+    const s = PulseObject.HANDLE_SIZE;
+    for (const c of cs) p.rect(c.x, c.y, s, s);
+    p.pop();
+  }
+
+  // Plain editable state for persistence. Runtime-only fields (shapes, timing,
+  // p5, selection) are omitted; a 'ship' keeps its svg source so its shapes can
+  // be rebuilt on load. The manager keys these by instance id (see serialize).
+  serialize() {
+    const s = {
+      name: this.name,
+      kind: this.kind,
+      type: this.type,
+      isPrototype: this.isPrototype,
+      prototypeId: this.prototypeId,
+      x: this.x,
+      y: this.y,
+      radius: this.radius,
+      color: this.color,
+      bpm: this.bpm,
+      pulseScale: this.pulseScale,
+      relax: this.relax,
+      sound: this.sound,
+      behavior: this.behavior,
+      volume: this.volume,
+      muted: this.muted,
+      division: this.division,
+      phaseOffset: this.phaseOffset,
+      timeSignature: this.timeSignature,
+      spawnAtLaunch: this.spawnAtLaunch,
+      // Sequencer pattern — any pulsing object can carry one (launcher fires / anything pulses).
+      patternMeasures: this.patternMeasures,
+      patternSteps: [...this.patternSteps],
+      event: this.event,
+      granularity: this.granularity,
+    };
+    if (this.kind === 'ship' && this.svg) s.svg = this.svg;
+    if (this.isQuad()) {
+      s.verts = this.verts.map((v) => ({ x: v.x, y: v.y }));
+      s.projectile = this.projectile;
+      s.attachPoint = this.attachPoint;
+      s.lifespanPhrases = this.lifespanPhrases;
+    }
+    if (this.kind === 'projectile') {
+      s.shape = this.shape; s.fill = this.fill; s.size = this.size; s.speed = this.speed;
+      s.explodes = this.explodes; s.aoeRadius = this.aoeRadius; s.lifetime = this.lifetime;
+      s.spinSpeed = this.spinSpeed; s.beatpulse = this.beatpulse;
+    }
+    if (this.kind === 'obstacle') {
+      s.size = this.size;
+      s.driftMin = this.driftMin; s.driftMax = this.driftMax;
+      s.spinMin = this.spinMin; s.spinMax = this.spinMax;
+      s.spawns = this.spawns; s.spawnProbability = this.spawnProbability;
+    }
+    if (Object.keys(this.overrides).length) s.overrides = { ...this.overrides };
+    return s;
+  }
+
+  // Local centroid (mean of the corner verts) — the quad's centre, as an offset from
+  // (x,y). The grab point that a collected launcher snaps to the ship.
+  vertCentroid() {
+    const n = this.verts.length;
+    let cx = 0, cy = 0;
+    for (const v of this.verts) { cx += v.x; cy += v.y; }
+    return n ? { x: cx / n, y: cy / n } : { x: 0, y: 0 };
+  }
+
+  // Where the object currently lives in the world: its assigned ship grab point when
+  // collected, otherwise its own centre (the quad's centroid, else its origin). Used by
+  // behaviours (fire-on-downbeat) so a collected launcher fires from the ship, not its home.
+  worldOrigin() {
+    if (this.__attachedShip) {
+      const pts = PulseObject.shipAttachPoints(this.__attachedShip);
+      return pts[this.__attachSlot] || pts[0] || { x: this.x, y: this.y };
+    }
+    if (this.isQuad()) {
+      const c = this.vertCentroid();
+      return { x: this.x + c.x, y: this.y + c.y };
+    }
+    return { x: this.x, y: this.y };
+  }
+
+  // Hit test in screen space (rest size). A downbeatLauncher tests its quad polygon; the
+  // rest are circles by radius.
+  contains(x, y) {
+    if (this.isQuad()) return PulseObject.pointInPoly(x, y, this.corners());
+    const dx = x - this.x;
+    const dy = y - this.y;
+    const r = this.kind === 'projectile' ? Math.max(10, this.size) : this.radius;   // preview is size, not radius
+    return dx * dx + dy * dy <= r * r;
+  }
+}
+
+// A ship whose radius equals this renders at its imported (targetSize) size.
+PulseObject.SHIP_REF_RADIUS = 100;
+
+// downbeatLauncher corner handles: on-screen size, grab tolerance.
+PulseObject.HANDLE_SIZE = 9;
+PulseObject.HANDLE_HIT = 10;
+
+// Grab points on the ship where collected launchers attach, as ship-local offsets in
+// fractions of the ship's radius (front = the nose direction = ship-local -Y). A launcher
+// snaps its centroid to the nearest free one. Tune the fractions to taste; later, launchers
+// may carry their own grab offset. Order: nose, left fin, right fin.
+PulseObject.SHIP_ATTACH_POINTS = [
+  { x: 0,     y: -0.7 },    // nose
+  { x: -0.55, y: 0.55 },    // left fin
+  { x: 0.55,  y: 0.55 },    // right fin
+];
+
+// A launcher's attach choice → the ship grab points it may bind to (indices into
+// SHIP_ATTACH_POINTS). 'either' takes whichever side (left/right) it touches and is free.
+PulseObject.ATTACH_CANDIDATES = { nose: [0], left: [1], right: [2], either: [1, 2] };
+
+// Collection zone radius around each grab point, as a fraction of the ship's radius: a
+// launcher is collected only when its chosen zone overlaps the launcher (not any overlap).
+PulseObject.ATTACH_ZONE = 0.5;
+
+// The ship's grab points in world space (rotated with the ship).
+PulseObject.shipAttachPoints = (ship) => {
+  const r = ship.radius;
+  const c = Math.cos(ship.rotation), s = Math.sin(ship.rotation);
+  return PulseObject.SHIP_ATTACH_POINTS.map((pt) => {
+    const lx = pt.x * r, ly = pt.y * r;
+    return { x: ship.x + lx * c - ly * s, y: ship.y + lx * s + ly * c };
+  });
+};
+
+// Migrate legacy kind names loaded from older saved scenes to the current launcher kinds.
+PulseObject.MIGRATE_KIND = { downbeatGun: 'downbeatLauncher', fourMeasureGun: 'fourMeasureLauncher' };
+
+// kind → high-level type, and a type → its canonical kind (for the editor's type dropdown,
+// which converts an object between types). 'drum' is deprecated (kick-circle/drumKick).
+PulseObject.KIND_TYPE = {
+  downbeatLauncher: 'launcher', fourMeasureLauncher: 'launcher', projectile: 'projectile',
+  metronome: 'metronome', ship: 'ship', circle: 'drum', drumKick: 'drum', obstacle: 'obstacle',
+};
+
+// Base rock outline for an obstacle definition preview (the AsteroidManager's runtime rocks
+// use the fuller Asteroid polygons). Authored around a ±72 box; OBSTACLE_REF maps `size` to it.
+PulseObject.OBSTACLE_REF = 72;
+PulseObject.OBSTACLE_SHAPE = [
+  { x: 68, y: -51 }, { x: -3, y: -80 }, { x: -58, y: -51 }, { x: -71, y: 1 },
+  { x: -38, y: 62 }, { x: 4, y: 54 }, { x: 17, y: 34 }, { x: 33, y: 49 },
+  { x: 68, y: 26 }, { x: 72, y: -8 },
+];
+PulseObject.TYPE_KIND = {
+  launcher: 'downbeatLauncher', projectile: 'projectile', metronome: 'metronome', ship: 'ship',
+  target: 'target', pickup: 'pickup', obstacle: 'obstacle', trigger: 'trigger',
+};
+
+// Default fill per kind (ship/metronome use the ship colour). New stub types get their own.
+PulseObject.KIND_COLOR = {
+  drumKick: '#e6a15c', downbeatLauncher: '#7bd88b', fourMeasureLauncher: '#e0567b',
+  target: '#e05a5a', pickup: '#5ad0a0', obstacle: '#9a8a5a', trigger: '#c08ae0',
+};
+
+// Rectangle as four corner-vertex offsets (from centre), the default downbeatLauncher shape.
+PulseObject.rectVerts = (w, h) => {
+  const hw = w / 2, hh = h / 2;
+  return [{ x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }];
+};
+
+// Vertices for a projectile shape at a given half-size, borrowed from the particle
+// system (circle draws as an ellipse; these verts are the square-boundary fallback).
+// Shared by the projectile preview (PulseObject) and the flying Projectile.
+PulseObject.projectileShapeVerts = (shape, size) => {
+  switch (shape) {
+    case 'square':   return [{ x: -size, y: size }, { x: size, y: size }, { x: size, y: -size }, { x: -size, y: -size }];
+    case 'triangle': return [{ x: -size, y: size / 2 }, { x: size, y: size / 2 }, { x: 0, y: -size }];
+    case 'line':     return [{ x: -size, y: 0 }, { x: size, y: 0 }];
+    default:         return [{ x: -size, y: -size }, { x: size, y: -size }, { x: size, y: size }, { x: -size, y: size }];
+  }
+};
+
+// Ray-casting point-in-polygon (works for any quad, incl. concave / self-intersecting).
+PulseObject.pointInPoly = (x, y, pts) => {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+    if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+};
+
+// How far ahead (ms) to pre-schedule beats on the audio clock. Must exceed the frame
+// interval so no beat is missed between frames; larger just queues further ahead.
+PulseObject.LOOKAHEAD_MS = 100;

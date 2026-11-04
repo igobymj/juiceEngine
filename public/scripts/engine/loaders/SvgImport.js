@@ -114,11 +114,14 @@ export function boundsOf(shapes) {
 
 // Recentre (and optionally scale/flip) shapes about their combined centre, so
 // multiple shapes placed at one position reconstruct the artwork's layout.
-// opts: { center = true, targetSize (fit longest side), scale, flipY = false }
+// Pass `about` (an {x,y} in source coords, e.g. another artwork's centre) with an
+// explicit `scale` to place these shapes in *that* artwork's local frame — so a
+// second SVG drawn in the same viewBox keeps its relative position.
+// opts: { center = true, about {x,y}, targetSize (fit longest side), scale, flipY = false }
 export function normalizeShapes(shapes, opts = {}) {
   const b = boundsOf(shapes);
-  const cx = opts.center === false ? 0 : b.cx;
-  const cy = opts.center === false ? 0 : b.cy;
+  const cx = opts.about ? opts.about.x : (opts.center === false ? 0 : b.cx);
+  const cy = opts.about ? opts.about.y : (opts.center === false ? 0 : b.cy);
 
   let s = 1;
   if (opts.targetSize) s = opts.targetSize / (Math.max(b.width, b.height) || 1);

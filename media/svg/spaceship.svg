@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <style>
+      .line { fill: none; stroke: #1a1a1a; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+      .bg-fill { fill: #ffffff; stroke: #1a1a1a; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+      .accent { fill: #1a1a1a; }
+    </style>
+  </defs>
+
+  <!-- Engine Nozzle -->
+  <path class="bg-fill" d="M 170 290 L 160 320 C 180 325 220 325 240 320 L 230 290 Z" />
+  <line x1="173" y1="305" x2="227" y2="305" class="line" />
+
+  <!-- Left Fin -->
+  <path class="bg-fill" d="M 150 220 L 80 280 L 90 300 L 160 280 Z" />
+  <line x1="110" y1="260" x2="155" y2="250" class="line" />
+
+  <!-- Right Fin -->
+  <path class="bg-fill" d="M 250 220 L 320 280 L 310 300 L 240 280 Z" />
+  <line x1="290" y1="260" x2="245" y2="250" class="line" />
+
+  <!-- Main Fuselage -->
+  <path class="bg-fill" d="M 200 40 C 260 110 270 230 240 290 L 160 290 C 130 230 140 110 200 40 Z" />
+
+  <!-- Nose Cone Detail -->
+  <path class="line" d="M 172 100 C 190 112 210 112 228 100" />
+  
+  <!-- Fuselage Base Rings -->
+  <path class="line" d="M 152 265 C 180 273 220 273 248 265" />
+  <path class="line" d="M 145 245 C 175 253 225 253 255 245" />
+
+  <!-- Main Porthole / Window -->
+  <circle cx="200" cy="165" r="28" class="bg-fill" />
+  <circle cx="200" cy="165" r="16" class="line" />
+  
+  <!-- Window Glass Reflection Line -->
+  <path class="line" d="M 188 153 A 16 16 0 0 1 212 153" />
+
+  <!-- Rivet Details -->
+  <circle cx="200" cy="120" r="2" class="accent" />
+  <circle cx="200" cy="205" r="2" class="accent" />
+  
+</svg>

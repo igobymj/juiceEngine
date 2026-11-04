@@ -66,6 +66,23 @@ export default class SoundManager extends Manager {
 		this.__musicMix.volume.value = db;
 	}
 
+	// --- Global mute (app-agnostic) ---
+	// Every app's SoundManager feeds Tone's single master output, so muting there
+	// silences all sound everywhere regardless of which app/session is active.
+	static setMuted(muted) {
+		SoundManager.__muted = !!muted;
+		Tone.getDestination().mute = SoundManager.__muted;
+	}
+
+	static get muted() {
+		return !!SoundManager.__muted;
+	}
+
+	static toggleMute() {
+		SoundManager.setMuted(!SoundManager.muted);
+		return SoundManager.muted;
+	}
+
 	get instance() {
 		return this.__instance;
 	}

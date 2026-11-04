@@ -44,6 +44,20 @@ app.get('/api/sounds', (req, res) => {
   }
 });
 
+// Enumerate music tracks in media/music so the editor can list them. Served
+// statically from that path, like the sound clips above.
+app.get('/api/music', (req, res) => {
+  const dir = path.join(__dirname, 'media', 'music');
+  try {
+    const files = fs.existsSync(dir)
+      ? fs.readdirSync(dir).filter((f) => /\.(wav|mp3|ogg|m4a|aac|flac)$/i.test(f))
+      : [];
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 app.listen(port, () => {
   console.log(`juiceEngine running at http://localhost:${port}`);
 });

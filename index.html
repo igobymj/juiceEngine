@@ -15,11 +15,12 @@
 <body>
   <!-- Top-level: each game is its own window tab. -->
   <nav id="game-tabs">
+    <button class="game-tab" data-app="rtd">Rhythm Space</button>
     <button class="game-tab" data-app="burst">burst</button>
     <button class="game-tab" data-app="orbit">orbit</button>
     <button class="game-tab" data-app="primitives">primitives</button>
     <button class="game-tab" data-app="asteroids">asteroids</button>
-    <button class="game-tab" data-app="rtd">RTD</button>
+    <button id="mute-toggle" type="button" title="Mute all sound" aria-pressed="false">🔊</button>
   </nav>
 
   <div id="stage">
@@ -36,6 +37,19 @@
     <button class="tab" data-mode="garden">garden</button>
   </nav>
   <aside id="editor-panel"></aside>
+
+  <!-- RTD's own mode tabs (objects/game), shown only while RTD is active.
+       Object editing uses the shared right-edge editor. -->
+  <nav id="rtd-tabs">
+    <button class="tab" data-mode="objects">objects</button>
+    <button class="tab" data-mode="game">game</button>
+    <button class="tab" data-mode="editor">editor</button>
+  </nav>
+
+  <!-- Scene tabs — one authored scene per tab, shown only in RTD's editor mode.
+       Objects (prototypes) are global; each scene is its own set of placed instances.
+       Populated from RtdManager.sceneList() in index.js. -->
+  <nav id="rtd-scene-tabs"></nav>
 
   <script src="https://cdn.jsdelivr.net/npm/tone@14/build/Tone.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.4.1/lib/p5.min.js"></script>
